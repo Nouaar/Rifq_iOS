@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>AUTH_BASE_URL</key>
-	<string>http://localhost:3000</string>
+	<string>https://rifq.onrender.com</string>
 	<key>API_BASE_URL </key>
-	<string>http://localhost:3000</string>
+	<string>https://rifq.onrender.com</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
