@@ -1,0 +1,10 @@
+/* 
+  Localizable..strings
+  vet.tn
+
+  Created by Mac on 7/11/2025.
+  
+*/
+"home.title" = "حيواناتي";
+"home.findVet" = "ابحث عن طبيب بيطري";
+"home.chatAI" = "دردشة الذكاء الاصطناعي";

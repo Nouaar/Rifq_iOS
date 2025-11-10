@@ -1,0 +1,10 @@
+/* 
+  Localizable..strings
+  vet.tn
+
+  Created by Mac on 7/11/2025.
+  
+*/
+"home.title" = "My pets";
+"home.findVet" = "Find a vet";
+"home.chatAI" = "Chat AI";
