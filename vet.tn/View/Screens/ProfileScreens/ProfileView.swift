@@ -192,87 +192,11 @@ struct ProfileView: View {
                                     value: locationText,
                                     icon: "location.fill"
                                 )
-                            }
-                            .padding(.horizontal, 16)
                         }
-                        
-                        // My Pets Section
-                        VStack(alignment: .leading, spacing: 16) {
-                            HStack {
-                                Text("My Pets")
-                                    .font(.system(size: 18, weight: .bold))
-                                    .foregroundColor(.vetTitle)
-                                Spacer()
-                                NavigationLink {
-                                    AddPetFlowView()
-                                        .onDisappear {
-                                            // Reload pets when returning from AddPetFlowView
-                                            Task {
-                                                guard session.user?.id != nil else { return }
-                                                await petViewModel.loadPets()
-                                            }
-                                        }
-                                } label: {
-                                    Image(systemName: "plus.circle.fill")
-                                        .font(.system(size: 20))
-                                        .foregroundColor(.vetCanyon)
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                            
-                            if petViewModel.isLoading {
-                                ProgressView()
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                            } else if petViewModel.pets.isEmpty {
-                                VStack(spacing: 8) {
-                                    Text("No pets yet")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.vetSubtitle)
-                                    NavigationLink {
-                                        AddPetFlowView()
-                                            .onDisappear {
-                                                // Reload pets when returning from AddPetFlowView
-                                                Task {
-                                                    guard session.user?.id != nil else { return }
-                                                    await petViewModel.loadPets()
-                                                }
-                                            }
-                                    } label: {
-                                        Text("Add Your First Pet")
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundColor(.vetCanyon)
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 8)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 8)
-                                                    .stroke(Color.vetCanyon, lineWidth: 1)
-                                            )
-                                    }
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 20)
-                            } else {
-                                VStack(spacing: 12) {
-                                    ForEach(petViewModel.pets) { pet in
-                                        NavigationLink {
-                                            PetProfileView(pet: pet)
-                                        } label: {
-                                            PetRow(
-                                                name: pet.name,
-                                                breed: pet.breed ?? "Unknown",
-                                                age: pet.ageText,
-                                                color: .vetCanyon
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                                .padding(.horizontal, 16)
-                            }
-                        }
-                        
-                            // Settings Section
+                        .padding(.horizontal, 16)
+                    }
+                    
+                    // Settings Section
                         VStack(alignment: .leading, spacing: 16) {
                             Text("Settings")
                                 .font(.system(size: 18, weight: .bold))

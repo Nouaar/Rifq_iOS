@@ -7,24 +7,24 @@ import SwiftUI
 
 // Tabs
 enum VetTab: CaseIterable, Hashable {
-    case home, find, ai, store, profile
+    case home, discover, ai, myPets, profile
 
     var title: String {
         switch self {
-        case .home:    return "Home"
-        case .find:    return "Find"
-        case .ai:      return "AI Chat"
-        case .store:   return "Store"
-        case .profile: return "Profile"
+        case .home:     return "Home"
+        case .discover: return "Discover"
+        case .ai:       return "AI Chat"
+        case .myPets:   return "My Pets"
+        case .profile:  return "Profile"
         }
     }
     var systemImage: String {
         switch self {
-        case .home:    return "pawprint.fill"
-        case .find:    return "map"
-        case .ai:      return "sparkles"
-        case .store:   return "bag.fill"
-        case .profile: return "person.crop.circle.fill"
+        case .home:     return "house.fill"
+        case .discover: return "location.magnifyingglass"
+        case .ai:       return "sparkles"
+        case .myPets:   return "pawprint.fill"
+        case .profile:  return "person.crop.circle.fill"
         }
     }
 }
@@ -43,9 +43,9 @@ struct VetTabBar: View {
                         .stroke(Color.vetStroke.opacity(0.35), lineWidth: 1)
                 )
 
-            HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .center, spacing: 8) {
                 standardButton(for: .home)
-                standardButton(for: .find)
+                standardButton(for: .discover)
 
                 Spacer(minLength: 0)
 
@@ -53,10 +53,10 @@ struct VetTabBar: View {
 
                 Spacer(minLength: 0)
 
-                standardButton(for: .store)
+                standardButton(for: .myPets)
                 standardButton(for: .profile)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 12)
             .padding(.vertical, 10)
         }
         .frame(height: 90)
@@ -81,20 +81,20 @@ struct VetTabBar: View {
                         .frame(height: 44)
                 }
 
-                VStack(spacing: 3) {
+                VStack(spacing: 2) {
                     Image(systemName: tab.systemImage)
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(isActive ? .vetCanyon : .vetSubtitle)
-                        .scaleEffect(isActive ? 1.06 : 1.0)
+                        .scaleEffect(isActive ? 1.05 : 1.0)
 
                     Text(tab.title)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(isActive ? .vetCanyon : .vetSubtitle)
-                        .lineLimit(1)                 // titres sur 1 ligne
-                        .minimumScaleFactor(0.75)     // réduit légèrement si manque de place
-                        .allowsTightening(true)       // évite l’ellipse trop tôt
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .allowsTightening(true)
                 }
-                .padding(.horizontal, 10)            // moins de padding pour plus de largeur utile
+                .padding(.horizontal, 6)
                 .frame(height: 44)
             }
             .frame(maxWidth: .infinity)

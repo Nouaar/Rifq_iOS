@@ -20,12 +20,12 @@ struct MainTabView: View {
                     switch tab {
                     case .home:
                         HomeView(tabSelection: $tab)     
-                    case .find:
-                        FindHubView()
+                    case .discover:
+                        DiscoverView()
                     case .ai:
                         ChatAIView(tabSelection: $tab)
-                    case .store:
-                        MapScreen()
+                    case .myPets:
+                        MyPetsView()
                     case .profile:
                         ProfileView()
                     }
@@ -34,9 +34,9 @@ struct MainTabView: View {
                 .animation(.easeInOut(duration: 0.25), value: tab)
                 .onPreferenceChange(TabBarHiddenPreferenceKey.self) { hideTabBar = $0 }
                 .onChange(of: tab) { oldTab, newTab in
-                    // When switching to Profile tab, trigger a refresh notification
-                    // Small delay to ensure ProfileView is ready
-                    if newTab == .profile {
+                    // When switching to Profile or MyPets tab, trigger a refresh notification
+                    // Small delay to ensure views are ready
+                    if newTab == .profile || newTab == .myPets {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             NotificationCenter.default.post(name: NSNotification.Name("RefreshProfilePets"), object: nil)
                         }
