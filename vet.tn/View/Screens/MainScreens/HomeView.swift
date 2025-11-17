@@ -299,17 +299,94 @@ struct Pill: View {
     }
 }
 
+// MARK: - Helper for pet photo display
+
+@ViewBuilder
+private func petAvatarView(photoString: String, emoji: String, size: CGFloat) -> some View {
+    // Check if it's a URL
+    if photoString.hasPrefix("http://") || photoString.hasPrefix("https://"),
+       let photoURL = URL(string: photoString) {
+        AsyncImage(url: photoURL) { phase in
+            switch phase {
+            case .empty:
+                ZStack {
+                    Circle()
+                        .fill(Color.vetCanyon.opacity(0.28))
+                        .frame(width: size, height: size)
+                    ProgressView()
+                        .scaleEffect(0.7)
+                }
+            case .success(let image):
+                image
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+            case .failure:
+                ZStack {
+                    Circle()
+                        .fill(Color.vetCanyon.opacity(0.28))
+                        .frame(width: size, height: size)
+                    Text(emoji)
+                        .font(.system(size: size * 0.48))
+                }
+            @unknown default:
+                ZStack {
+                    Circle()
+                        .fill(Color.vetCanyon.opacity(0.28))
+                        .frame(width: size, height: size)
+                    Text(emoji)
+                        .font(.system(size: size * 0.48))
+                }
+            }
+        }
+    } else if let base64String = extractBase64String(from: photoString),
+              let imageData = Data(base64Encoded: base64String),
+              let uiImage = UIImage(data: imageData) {
+        Image(uiImage: uiImage)
+            .resizable()
+            .scaledToFill()
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+    } else {
+        ZStack {
+            Circle()
+                .fill(Color.vetCanyon.opacity(0.28))
+                .frame(width: size, height: size)
+            Text(emoji)
+                .font(.system(size: size * 0.48))
+        }
+    }
+}
+
+private func extractBase64String(from photoString: String) -> String? {
+    if photoString.hasPrefix("data:image") {
+        if let commaIndex = photoString.firstIndex(of: ",") {
+            return String(photoString[photoString.index(after: commaIndex)...])
+        } else {
+            return photoString
+        }
+    } else {
+        return photoString
+    }
+}
+
 struct PetStatusRow: View {
     let pet: Pet
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(Color.vetCanyon.opacity(0.28))
-                    .frame(width: 42, height: 42)
-                Text(pet.emoji)
-                    .font(.system(size: 20))
+            // Display photo if available, otherwise show emoji
+            if let photoString = pet.photo, !photoString.isEmpty {
+                petAvatarView(photoString: photoString, emoji: pet.emoji, size: 42)
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(Color.vetCanyon.opacity(0.28))
+                        .frame(width: 42, height: 42)
+                    Text(pet.emoji)
+                        .font(.system(size: 20))
+                }
             }
 
             VStack(alignment: .leading, spacing: 4) {

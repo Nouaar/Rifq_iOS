@@ -63,6 +63,13 @@ final class PetViewModel: ObservableObject {
                 
                 #if DEBUG
                 print("✅ Loaded \(loadedPets.count) pets: \(loadedPets.map { $0.name })")
+                for pet in loadedPets {
+                    if let photo = pet.photo {
+                        print("📸 Pet '\(pet.name)' has photo: \(photo.prefix(50))...")
+                    } else {
+                        print("⚠️ Pet '\(pet.name)' has no photo field")
+                    }
+                }
                 #endif
                 
                 pets = loadedPets
@@ -105,12 +112,29 @@ final class PetViewModel: ObservableObject {
         isLoading = true
         error = nil
         
+        #if DEBUG
+        if let photo = request.photo {
+            print("📤 Sending pet with photo (base64 length: \(photo.count) chars)")
+        } else {
+            print("📤 Sending pet without photo")
+        }
+        #endif
+        
         do {
             let newPet = try await petService.createPet(
                 ownerId: userId,
                 request: request,
                 accessToken: accessToken
             )
+            
+            #if DEBUG
+            if let photo = newPet.photo {
+                print("✅ Pet created with photo: \(photo.prefix(50))...")
+            } else {
+                print("⚠️ Pet created but backend did not return photo field")
+            }
+            #endif
+            
             // Reload all pets to ensure we have the latest data from server
             await loadPets()
             

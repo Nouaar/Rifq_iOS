@@ -73,24 +73,125 @@ struct MedicalHistoryView: View {
 
 // MARK: - Pet Header Card
 
+// MARK: - Helper for pet header photo
+
+@ViewBuilder
+private func petHeaderPhotoView(photoString: String, emoji: String) -> some View {
+    // Check if it's a URL
+    if photoString.hasPrefix("http://") || photoString.hasPrefix("https://"),
+       let photoURL = URL(string: photoString) {
+        AsyncImage(url: photoURL) { phase in
+            switch phase {
+            case .empty:
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.vetCanyon.opacity(0.2), Color.vetCanyon.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 100, height: 100)
+                    ProgressView()
+                }
+            case .success(let image):
+                image
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 100, height: 100)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.vetStroke.opacity(0.3), lineWidth: 2))
+            case .failure:
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.vetCanyon.opacity(0.2), Color.vetCanyon.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 100, height: 100)
+                    Text(emoji)
+                        .font(.system(size: 50))
+                }
+            @unknown default:
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.vetCanyon.opacity(0.2), Color.vetCanyon.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 100, height: 100)
+                    Text(emoji)
+                        .font(.system(size: 50))
+                }
+            }
+        }
+    } else if let base64String = extractBase64String(from: photoString),
+              let imageData = Data(base64Encoded: base64String),
+              let uiImage = UIImage(data: imageData) {
+        Image(uiImage: uiImage)
+            .resizable()
+            .scaledToFill()
+            .frame(width: 100, height: 100)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(Color.vetStroke.opacity(0.3), lineWidth: 2))
+    } else {
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [Color.vetCanyon.opacity(0.2), Color.vetCanyon.opacity(0.1)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 100, height: 100)
+            Text(emoji)
+                .font(.system(size: 50))
+        }
+    }
+}
+
+private func extractBase64String(from photoString: String) -> String? {
+    if photoString.hasPrefix("data:image") {
+        if let commaIndex = photoString.firstIndex(of: ",") {
+            return String(photoString[photoString.index(after: commaIndex)...])
+        } else {
+            return photoString
+        }
+    } else {
+        return photoString
+    }
+}
+
 private struct PetHeaderCard: View {
     let pet: Pet
 
     var body: some View {
         VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.vetCanyon.opacity(0.2), Color.vetCanyon.opacity(0.1)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+            // Display photo if available, otherwise show emoji with gradient background
+            if let photoString = pet.photo, !photoString.isEmpty {
+                petHeaderPhotoView(photoString: photoString, emoji: pet.emoji)
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.vetCanyon.opacity(0.2), Color.vetCanyon.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .frame(width: 100, height: 100)
-                
-                Text(pet.emoji)
-                    .font(.system(size: 50))
+                        .frame(width: 100, height: 100)
+                    Text(pet.emoji)
+                        .font(.system(size: 50))
+                }
             }
 
             VStack(spacing: 6) {

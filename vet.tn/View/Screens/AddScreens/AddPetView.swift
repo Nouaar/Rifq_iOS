@@ -205,8 +205,38 @@ struct AddPetFlowView: View {
                                      (vaccinations?.isEmpty == false) || 
                                      (chronicConditions?.isEmpty == false)
         
-        // Convert photo to base64 if available (or upload separately - for now, we'll skip photo upload in this step)
-        let photo: String? = nil // TODO: Implement photo upload
+        // Convert photo to base64 if available, but limit size to avoid 413 errors
+        // Base64 increases size by ~33%, so we limit raw data to ~500KB (base64 will be ~650KB)
+        let maxPhotoSize = 500 * 1024 // 500KB
+        var finalPhotoData: Data? = draft.photoData
+        let photo: String?
+        
+        if let data = finalPhotoData {
+            if data.count > maxPhotoSize {
+                // If still too large, try compressing further
+                if let uiImage = UIImage(data: data),
+                   let compressed = uiImage.jpegData(compressionQuality: 0.5),
+                   compressed.count <= maxPhotoSize {
+                    finalPhotoData = compressed
+                    draft.photoData = compressed
+                } else {
+                    // Skip photo if still too large to avoid 413 error
+                    #if DEBUG
+                    print("⚠️ Photo too large (\(data.count) bytes), skipping to avoid 413 error")
+                    #endif
+                    finalPhotoData = nil
+                }
+            }
+            
+            // Encode to base64 if we have valid data
+            if let data = finalPhotoData, data.count <= maxPhotoSize {
+                photo = data.base64EncodedString()
+            } else {
+                photo = nil
+            }
+        } else {
+            photo = nil
+        }
         
         let request = CreatePetRequest(
             name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -359,8 +389,9 @@ private struct PetInfoStep: View {
                             guard let new else { return }
                             Task.detached(priority: .userInitiated) {
                                 // Chargement + downsample hors MainActor
+                                // Reduce size more aggressively to avoid 413 errors
                                 if let data = try? await new.loadTransferable(type: Data.self),
-                                   let down = downsampleJPEGData(data, maxPixel: 800, quality: 0.85) {
+                                   let down = downsampleJPEGData(data, maxPixel: 400, quality: 0.7) {
                                     await MainActor.run {
                                         draft.photoData = down
                                         if let ui = UIImage(data: down) {
@@ -412,13 +443,13 @@ private struct PetInfoStep: View {
         .sheet(isPresented: $showImageSheet) {
             ImagePicker(source: useCamera ? .camera : .photoLibrary) { uiImage in
                 guard let ui = uiImage else { return }
-                // Downsample côté UIKit aussi
-                let target = CGSize(width: 800, height: 800)
-                let down = ui.downsampledJPEGData(maxPixel: max(target.width, target.height), quality: 0.85)
+                // Downsample more aggressively to avoid 413 errors (400px max, 0.7 quality)
+                let down = ui.downsampledJPEGData(maxPixel: 400, quality: 0.7)
                 if let down, let small = UIImage(data: down) {
                     pickedImage = Image(uiImage: small)
                     draft.photoData = down
-                } else if let data = ui.jpegData(compressionQuality: 0.85) {
+                } else if let data = ui.jpegData(compressionQuality: 0.7) {
+                    // Fallback: compress without downsampling if downsampling fails
                     pickedImage = Image(uiImage: ui)
                     draft.photoData = data
                 }

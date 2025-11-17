@@ -36,6 +36,9 @@ struct Pet: Codable, Identifiable {
         case weight
         case height
         case photo
+        case photoUrl
+        case image
+        case imageUrl
         case microchipId
         case owner
         case medicalHistory
@@ -94,7 +97,20 @@ struct Pet: Codable, Identifiable {
         self.color = try? c.decode(String.self, forKey: .color)
         self.weight = try? c.decode(Double.self, forKey: .weight)
         self.height = try? c.decode(Double.self, forKey: .height)
-        self.photo = try? c.decode(String.self, forKey: .photo)
+        
+        // Try multiple possible field names for photo
+        if let photo = try? c.decode(String.self, forKey: .photo) {
+            self.photo = photo
+        } else if let photo = try? c.decode(String.self, forKey: .photoUrl) {
+            self.photo = photo
+        } else if let photo = try? c.decode(String.self, forKey: .image) {
+            self.photo = photo
+        } else if let photo = try? c.decode(String.self, forKey: .imageUrl) {
+            self.photo = photo
+        } else {
+            self.photo = nil
+        }
+        
         self.microchipId = try? c.decode(String.self, forKey: .microchipId)
         self.owner = try? c.decode(PetOwner.self, forKey: .owner)
         self.medicalHistory = try? c.decode(MedicalHistory.self, forKey: .medicalHistory)

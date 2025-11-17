@@ -40,9 +40,15 @@ struct PetProfileView: View {
                     TopBar(title: currentPet.name)
 
                     VStack(spacing: 8) {
-                        Text(currentPet.emoji)
-                            .font(.system(size: 60))
-                            .padding(.top, 8)
+                        // Display photo if available, otherwise show emoji
+                        if let photoString = currentPet.photo, !photoString.isEmpty {
+                            petPhotoView(photoString: photoString)
+                                .padding(.top, 8)
+                        } else {
+                            Text(currentPet.emoji)
+                                .font(.system(size: 60))
+                                .padding(.top, 8)
+                        }
 
                         Text(currentPet.name)
                             .font(.system(size: 22, weight: .bold, design: .rounded))
@@ -188,6 +194,59 @@ struct PetProfileView: View {
     }
 
     // MARK: - Subviews
+    
+    @ViewBuilder
+    private func petPhotoView(photoString: String) -> some View {
+        // Check if it's a URL
+        if photoString.hasPrefix("http://") || photoString.hasPrefix("https://"),
+           let photoURL = URL(string: photoString) {
+            AsyncImage(url: photoURL) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .frame(width: 100, height: 100)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 100, height: 100)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.vetStroke, lineWidth: 2))
+                case .failure:
+                    Text(currentPet.emoji)
+                        .font(.system(size: 60))
+                @unknown default:
+                    Text(currentPet.emoji)
+                        .font(.system(size: 60))
+                }
+            }
+        } else if let base64String = extractBase64String(from: photoString),
+                  let imageData = Data(base64Encoded: base64String),
+                  let uiImage = UIImage(data: imageData) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 100, height: 100)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.vetStroke, lineWidth: 2))
+        } else {
+            // Fallback to emoji if base64 decode fails
+            Text(currentPet.emoji)
+                .font(.system(size: 60))
+        }
+    }
+    
+    private func extractBase64String(from photoString: String) -> String? {
+        if photoString.hasPrefix("data:image") {
+            if let commaIndex = photoString.firstIndex(of: ",") {
+                return String(photoString[photoString.index(after: commaIndex)...])
+            } else {
+                return photoString
+            }
+        } else {
+            return photoString
+        }
+    }
     
     private func refreshPet() async {
         await petViewModel.refreshPet(petId: currentPet.id)
