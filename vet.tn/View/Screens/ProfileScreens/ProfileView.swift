@@ -14,7 +14,7 @@ struct ProfileView: View {
     @State private var hasAppeared = false
     @State private var showingSettings = false
     @State private var showLogoutConfirmation = false
-    @State private var goCommunity = false
+    @State private var goMessages = false
     @State private var goJoinTeam = false
     @State private var showingEditProfile = false
     
@@ -78,7 +78,7 @@ struct ProfileView: View {
                             showingSettings = true
                         },
                         onCommunity: {
-                            goCommunity = true
+                            goMessages = true
                         }
                     )
                     
@@ -419,8 +419,8 @@ struct ProfileView: View {
             } message: {
                 Text("To get the best experience, please complete your profile now.")
             }
-            .navigationDestination(isPresented: $goCommunity) {
-                CommunityView()
+            .navigationDestination(isPresented: $goMessages) {
+                ConversationsListView()
             }
             .navigationDestination(isPresented: $goJoinTeam) {
                 JoinTeamView()

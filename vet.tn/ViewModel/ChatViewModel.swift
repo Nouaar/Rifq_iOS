@@ -19,10 +19,12 @@ final class ChatViewModel: ObservableObject {
     @Published var unreadCount: Int = 0
     
     private let chatService = ChatService.shared
+    private let socketManager = SocketManager.shared
     weak var sessionManager: SessionManager?
     
     private var pollingTimer: Timer?
     private var currentConversationId: String?
+    private var useSockets: Bool = true // Toggle to use sockets or polling
     
     func loadConversations() async {
         guard let session = sessionManager,
@@ -37,6 +39,12 @@ final class ChatViewModel: ObservableObject {
         do {
             conversations = try await chatService.getConversations(accessToken: accessToken)
             updateUnreadCount()
+            
+            // Connect to socket if not already connected
+            if useSockets, let userId = session.user?.id, !socketManager.isConnected {
+                setupSocketHandlers()
+                socketManager.connect(userId: userId, accessToken: accessToken)
+            }
         } catch {
             self.error = error.localizedDescription
             #if DEBUG
@@ -73,8 +81,12 @@ final class ChatViewModel: ObservableObject {
         
         isLoading = false
         
-        // Start polling for new messages
-        startPolling(conversationId: conversationId)
+        // Use sockets for real-time updates, fallback to polling if sockets not available
+        if useSockets && socketManager.isConnected {
+            socketManager.joinConversation(conversationId)
+        } else {
+            startPolling(conversationId: conversationId)
+        }
     }
     
     func markConversationAsRead(conversationId: String) async {
@@ -304,6 +316,12 @@ final class ChatViewModel: ObservableObject {
     func stopPolling() {
         pollingTimer?.invalidate()
         pollingTimer = nil
+        
+        // Leave socket room if using sockets
+        if useSockets, let conversationId = currentConversationId {
+            socketManager.leaveConversation(conversationId)
+        }
+        
         currentConversationId = nil
     }
     
@@ -454,9 +472,76 @@ final class ChatViewModel: ObservableObject {
         #endif
     }
     
+    // MARK: - Socket Handlers Setup
+    
+    private func setupSocketHandlers() {
+        socketManager.onMessageReceived = { [weak self] message in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                
+                // Only add if it's for the current conversation
+                if message.conversationId == self.currentConversationId {
+                    // Check if message already exists
+                    if !self.messages.contains(where: { $0.id == message.id }) {
+                        self.messages.append(message)
+                        // Mark as read if user is viewing this conversation
+                        if let conversationId = self.currentConversationId {
+                            try? await self.chatService.markAsRead(conversationId: conversationId, accessToken: self.sessionManager?.tokens?.accessToken ?? "")
+                        }
+                    }
+                }
+                
+                // Always refresh conversations to update last message
+                await self.loadConversations()
+            }
+        }
+        
+        socketManager.onMessageUpdated = { [weak self] message in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                
+                if let index = self.messages.firstIndex(where: { $0.id == message.id }) {
+                    self.messages[index] = message
+                }
+                
+                await self.loadConversations()
+            }
+        }
+        
+        socketManager.onMessageDeleted = { [weak self] messageId in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                
+                if let index = self.messages.firstIndex(where: { $0.id == messageId }) {
+                    self.messages.remove(at: index)
+                }
+                
+                await self.loadConversations()
+            }
+        }
+        
+        socketManager.onConversationUpdated = { [weak self] conversation in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                
+                if let index = self.conversations.firstIndex(where: { $0.id == conversation.id }) {
+                    self.conversations[index] = conversation
+                } else {
+                    // New conversation
+                    self.conversations.insert(conversation, at: 0)
+                }
+                
+                self.updateUnreadCount()
+            }
+        }
+    }
+    
     deinit {
         Task { @MainActor [weak self] in
             self?.stopPolling()
+            if self?.useSockets == true {
+                self?.socketManager.disconnect()
+            }
         }
     }
 }

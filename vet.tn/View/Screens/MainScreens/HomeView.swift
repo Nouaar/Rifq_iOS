@@ -21,7 +21,7 @@ struct HomeView: View {
     @State private var goCalendar  = false
     @State private var goPetSitter = false
     @State private var goAddPet    = false   // ⬅️ NEW
-    @State private var goCommunity = false
+    @State private var goMessages = false
 
     // Sélection animée
     @State private var selectedActionID: UUID?  = nil
@@ -38,7 +38,7 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     TopBar(
                         title: "Home",
-                        onCommunity: { goCommunity = true }
+                        onCommunity: { goMessages = true }
                     )
 
                     dailyTipCarousel
@@ -76,8 +76,8 @@ struct HomeView: View {
            AddPetFlowView()
                .navigationBarBackButtonHidden(false)
         }
-        .navigationDestination(isPresented: $goCommunity) {
-            CommunityView()
+        .navigationDestination(isPresented: $goMessages) {
+            ConversationsListView()
                 .navigationBarBackButtonHidden(false)
         }
         .onAppear {

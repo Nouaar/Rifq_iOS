@@ -13,7 +13,7 @@ struct TopBar: View {
     @StateObject private var chatManager = ChatManager.shared
     @StateObject private var notificationManager = NotificationManager.shared
 
-    @State private var showCommunitySheet = false
+    @State private var showMessagesSheet = false
     @State private var showNotificationsSheet = false
 
     var body: some View {
@@ -32,18 +32,18 @@ struct TopBar: View {
                 Spacer()
 
                 HStack(spacing: 10) {
-                    // Community button with badge
+                    // Messages button with badge
                     Button {
                         if let onCommunity {
                             onCommunity()
                         } else {
-                            showCommunitySheet = true
+                            showMessagesSheet = true
                         }
                     } label: {
-                        headerBadgeWithBadge("person.3.fill", count: chatManager.unreadCount)
+                        headerBadgeWithBadge("message.fill", count: chatManager.unreadCount)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Community")
+                    .accessibilityLabel("Messages")
                     
                     Button {
                         if let onNotifications {
@@ -90,11 +90,16 @@ struct TopBar: View {
                 alignment: .bottom
             )
         }
-        .sheet(isPresented: $showCommunitySheet) {
+        .sheet(isPresented: $showMessagesSheet) {
             NavigationStack {
-                CommunityView()
+                ConversationsListView()
             }
             .environmentObject(theme)
+            .environmentObject(session)
+            .onAppear {
+                chatManager.setSessionManager(session)
+                chatManager.startPolling()
+            }
         }
         .sheet(isPresented: $showNotificationsSheet) {
             NavigationStack {

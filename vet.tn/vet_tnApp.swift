@@ -11,7 +11,7 @@ import Combine
 import GoogleSignIn
 import UIKit
 
-// Handles Google Sign-In callback for SwiftUI lifecycle apps
+// Handles Google Sign-In callback and push notifications for SwiftUI lifecycle apps
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
@@ -20,6 +20,39 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         // Let GoogleSignIn process the redirect
         return GIDSignIn.sharedInstance.handle(url)
+    }
+    
+    // Handle remote notifications
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        // TODO: Once Firebase is integrated, pass token to FCM
+        // Messaging.messaging().apnsToken = deviceToken
+        #if DEBUG
+        print("📱 Device token registered: \(deviceToken.map { String(format: "%02.2hhx", $0) }.joined())")
+        #endif
+    }
+    
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        #if DEBUG
+        print("❌ Failed to register for remote notifications: \(error.localizedDescription)")
+        #endif
+    }
+    
+    // Handle remote notification when app is in background
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        Task { @MainActor in
+            FCMManager.shared.handleRemoteNotification(userInfo)
+        }
+        completionHandler(.newData)
     }
 }
 
@@ -34,9 +67,12 @@ struct vet_tnApp: App {
         GIDSignIn.sharedInstance.configuration = GIDConfiguration(
             clientID: "68176423413-uvu0od4sog6hiqnegaer9s44bo4qcgsa.apps.googleusercontent.com"
         )
+        
+        // Register for push notifications
+        FCMManager.shared.registerForPushNotifications()
 
         #if DEBUG
-        // Print the base URLs we’ll actually use (from Info.plist)
+        // Print the base URLs we'll actually use (from Info.plist)
         let authBase = Bundle.main.object(forInfoDictionaryKey: "AUTH_BASE_URL") as? String ?? "MISSING"
         let apiBase  = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String ?? "MISSING"
         print("🔧 AUTH_BASE_URL =", authBase)
