@@ -12,6 +12,7 @@ import Foundation
 //
 
 import SwiftUI
+import EventKit
 
 struct PetProfileView: View {
     let pet: Pet
@@ -117,6 +118,10 @@ struct PetProfileView: View {
                         }
                     }
                     .padding(.horizontal, 16)
+                    
+                    // MARK: - Calendar Section
+                    PetCalendarSection(pet: currentPet)
+                        .padding(.horizontal, 16)
 
                     // MARK: - Action Buttons
                     VStack(spacing: 12) {
@@ -359,6 +364,262 @@ struct HealthCard: View {
         .background(Color.vetCardBackground)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(color.opacity(0.4), lineWidth: 1))
         .cornerRadius(12)
+    }
+}
+
+// MARK: - Pet Calendar Section
+
+struct PetCalendarSection: View {
+    let pet: Pet
+    @StateObject private var calendarManager = CalendarManager()
+    @State private var showFullCalendar = false
+    @State private var showAddEventSheet = false
+    @State private var selectedEventType: CalendarEventType = .appointment
+    @State private var refreshID = UUID()
+    
+    private let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, h:mm a"
+        return formatter
+    }()
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("CALENDAR")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color.vetSubtitle)
+                
+                Spacer()
+                
+                Button {
+                    showFullCalendar = true
+                } label: {
+                    Text("View All")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.vetCanyon)
+                }
+            }
+            
+            if calendarManager.authorizationStatus == .notDetermined || calendarManager.authorizationStatus == .denied {
+                authorizationPrompt
+            } else {
+                calendarContent
+            }
+        }
+        .id(refreshID)
+        .onAppear {
+            Task {
+                if calendarManager.authorizationStatus != .authorized {
+                    _ = await calendarManager.requestAccess()
+                }
+                await calendarManager.loadEvents(for: pet.id)
+            }
+        }
+        .sheet(isPresented: $showFullCalendar) {
+            NavigationStack {
+                CalendarView(tabSelection: .constant(.myPets), useSystemNavBar: true, pet: pet)
+            }
+        }
+        .sheet(isPresented: $showAddEventSheet) {
+            AddCalendarEventView(
+                pet: pet,
+                eventType: selectedEventType,
+                calendarManager: calendarManager
+            )
+            .onDisappear {
+                // Reload events when sheet is dismissed
+                Task {
+                    await calendarManager.loadEvents(for: pet.id)
+                }
+            }
+        }
+    }
+    
+    private var authorizationPrompt: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "calendar.badge.exclamationmark")
+                .font(.system(size: 30))
+                .foregroundColor(.vetSubtitle)
+            
+            Text("Enable calendar access to track appointments, medications, and vaccinations")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.vetSubtitle)
+                .multilineTextAlignment(.center)
+            
+            Button {
+                Task { @MainActor in
+                    print("🔵 Requesting calendar access...")
+                    let granted = await calendarManager.requestAccess()
+                    print("🔵 Access granted: \(granted)")
+                    
+                    // Force a refresh of the authorization status
+                    calendarManager.checkAuthorizationStatus()
+                    print("🔵 Authorization status: \(calendarManager.authorizationStatus.rawValue)")
+                    
+                    // Force view refresh
+                    refreshID = UUID()
+                    
+                    if granted && calendarManager.authorizationStatus == .authorized {
+                        print("🔵 Loading events...")
+                        await calendarManager.loadEvents(for: pet.id)
+                    }
+                }
+            } label: {
+                Text("Enable Calendar")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.vetCanyon)
+                    .cornerRadius(8)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(Color.vetCardBackground)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.vetStroke.opacity(0.3), lineWidth: 1)
+        )
+    }
+    
+    private var calendarContent: some View {
+        VStack(spacing: 12) {
+            // Quick Add Buttons
+            HStack(spacing: 8) {
+                QuickAddButton(type: .medication, icon: "pills.fill", color: .orange) {
+                    selectedEventType = .medication
+                    showAddEventSheet = true
+                }
+                
+                QuickAddButton(type: .vaccination, icon: "syringe.fill", color: .green) {
+                    selectedEventType = .vaccination
+                    showAddEventSheet = true
+                }
+                
+                QuickAddButton(type: .appointment, icon: "calendar.badge.clock", color: .blue) {
+                    selectedEventType = .appointment
+                    showAddEventSheet = true
+                }
+                
+                QuickAddButton(type: .reminder, icon: "bell.fill", color: .purple) {
+                    selectedEventType = .reminder
+                    showAddEventSheet = true
+                }
+            }
+            
+            // Upcoming Events
+            if calendarManager.isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding()
+            } else {
+                let upcomingEvents = calendarManager.events
+                    .filter { $0.date >= Date() }
+                    .sorted { $0.date < $1.date }
+                    .prefix(3)
+                
+                if upcomingEvents.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "calendar.badge.plus")
+                            .font(.system(size: 24))
+                            .foregroundColor(.vetSubtitle)
+                        Text("No upcoming events")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.vetSubtitle)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(Array(upcomingEvents)) { event in
+                            CompactEventRow(event: event)
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color.vetCardBackground)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.vetStroke.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
+struct QuickAddButton: View {
+    let type: CalendarEventType
+    let icon: String
+    let color: Color
+    let action: () -> Void
+    
+    var body: some View {
+        Button {
+            action()
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(color)
+                Text(type.displayName)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.vetTitle)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(color.opacity(0.1))
+            .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct CompactEventRow: View {
+    let event: PetCalendarEvent
+    
+    private let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, h:mm a"
+        return formatter
+    }()
+    
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: event.type.icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(eventColor)
+                .frame(width: 28, height: 28)
+                .background(eventColor.opacity(0.15))
+                .clipShape(Circle())
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.vetTitle)
+                    .lineLimit(1)
+                
+                Text(dateFormatter.string(from: event.date))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.vetSubtitle)
+            }
+            
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+    
+    private var eventColor: Color {
+        switch event.type {
+        case .medication: return .orange
+        case .vaccination: return .green
+        case .appointment: return .blue
+        case .reminder: return .purple
+        }
     }
 }
 

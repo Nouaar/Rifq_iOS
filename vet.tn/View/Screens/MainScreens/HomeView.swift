@@ -64,7 +64,7 @@ struct HomeView: View {
         }
         .navigationDestination(isPresented: $goCalendar) {
             // Calendar avec back iOS rond (system nav bar)
-            CalendarView(tabSelection: $tabSelection, useSystemNavBar: true)
+            CalendarView(tabSelection: $tabSelection, useSystemNavBar: true, pet: nil)
                 .navigationBarBackButtonHidden(false)
         }
         .navigationDestination(isPresented: $goPetSitter) {
