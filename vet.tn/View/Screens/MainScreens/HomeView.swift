@@ -4,16 +4,19 @@
 //
 
 import SwiftUI
+import EventKit
 
 // MARK: - Home
 
 struct HomeView: View {
-    // Binding vers l’onglet actif de MainTabView
+    // Binding vers l'onglet actif de MainTabView
     @Binding var tabSelection: VetTab
     @EnvironmentObject private var session: SessionManager
     @StateObject private var petViewModel = PetViewModel()
     @StateObject private var chatManager = ChatManager.shared
     @StateObject private var notificationManager = NotificationManager.shared
+    @StateObject private var aiViewModel = PetAIViewModel()
+    @StateObject private var calendarManager = CalendarManager()
 
     // Navigation flags
     @State private var goFindVet   = false
@@ -29,6 +32,14 @@ struct HomeView: View {
 
     // (si tu veux chercher plus tard)
     @State private var searchText = ""
+    
+    // AI-generated data
+    @State private var petTips: [PetTip] = []
+    @State private var petStatuses: [String: PetStatus] = [:]
+    @State private var allReminders: [PetReminder] = []
+    @State private var isLoadingAI = false
+    @State private var aiError: String?
+    @State private var hasLoadedAI = false
 
     var body: some View {
         ZStack {
@@ -92,17 +103,51 @@ struct HomeView: View {
                 await chatManager.updateUnreadCount()
                 await notificationManager.updateUnreadCount()
             }
+            
+            // Load AI content when pets are loaded
+            if !petViewModel.pets.isEmpty {
+                Task {
+                    await loadAIContent()
+                }
+            }
         }
         .task(id: session.user?.id) {
             // Only load pets when user ID changes, not on every appear
             guard session.user?.id != nil else { return }
             await petViewModel.loadPets()
+            // Load AI content after pets are loaded
+            if !petViewModel.pets.isEmpty {
+                print("🏠 HomeView: Loading AI content for \(petViewModel.pets.count) pets")
+                await loadAIContent()
+            } else {
+                print("🏠 HomeView: No pets found, skipping AI content")
+            }
+        }
+        .onAppear {
+            // Also try to load AI content when view appears (if pets are already loaded)
+            if !petViewModel.pets.isEmpty && !hasLoadedAI && !isLoadingAI {
+                print("🏠 HomeView: onAppear - Loading AI content")
+                Task {
+                    await loadAIContent()
+                }
+            }
         }
         .onChange(of: session.isAuthenticated) { oldValue, newValue in
             // Only load pets when authentication state changes from false to true
             if !oldValue && newValue {
                 Task {
                     await petViewModel.loadPets()
+                    if !petViewModel.pets.isEmpty {
+                        await loadAIContent()
+                    }
+                }
+            }
+        }
+        .onChange(of: petViewModel.pets.count) { oldCount, newCount in
+            // Reload AI content when pets are added/removed
+            if newCount > 0 && newCount != oldCount {
+                Task {
+                    await loadAIContent()
                 }
             }
         }
@@ -110,40 +155,77 @@ struct HomeView: View {
 
     private var dailyTipCarousel: some View {
         VStack(alignment: .leading, spacing: 14) {
-                    HStack {
+            HStack {
                 Text("Daily Tips")
                     .font(.system(size: 18, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color.vetTitle)
+                    .foregroundStyle(Color.vetTitle)
 
-                        Spacer()
+                Spacer()
 
-                        Button {
-                            hapticTap()
-                            goAddPet = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 14, weight: .semibold))
-                                Text("Add a pet")
-                                    .font(.system(size: 14, weight: .semibold))
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.vetCardBackground)
-                            .foregroundStyle(Color.vetCanyon)
-                            .clipShape(Capsule())
+                Button {
+                    hapticTap()
+                    goAddPet = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("Add a pet")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.vetCardBackground)
+                    .foregroundStyle(Color.vetCanyon)
+                    .clipShape(Capsule())
                     .overlay(Capsule().stroke(Color.vetCanyon, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 14) {
-                    ForEach(dailyTipsMock) { tip in
-                        DailyTipCard(tip: tip)
-                    }
+            if isLoadingAI && !hasLoadedAI {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("Generating AI tips...")
+                        .font(.system(size: 13))
+                        .foregroundColor(.vetSubtitle)
                 }
-                .padding(.vertical, 2)
+                .frame(maxWidth: .infinity)
+                .padding()
+            } else if let error = aiError {
+                VStack(spacing: 8) {
+                    Text("AI unavailable")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.vetSubtitle)
+                    Button("Retry") {
+                        Task {
+                            await loadAIContent()
+                        }
+                    }
+                    .font(.system(size: 12))
+                    .foregroundColor(.vetCanyon)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+            } else if petTips.isEmpty {
+                // Fallback to static tips if AI not loaded
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(dailyTipsMock) { tip in
+                            DailyTipCard(tip: tip)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(petTips) { tip in
+                            DailyTipCard(tip: tip)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
             }
         }
         .padding(.horizontal, 18)
@@ -171,9 +253,31 @@ struct HomeView: View {
                         NavigationLink {
                             PetProfileView(pet: pet)
                         } label: {
-                            PetStatusRow(pet: pet)
+                            PetStatusRow(pet: pet, status: petStatuses[pet.id])
                         }
                         .buttonStyle(.plain)
+                    }
+                    
+                    // Refresh AI status button
+                    if !petViewModel.pets.isEmpty {
+                        Button {
+                            Task {
+                                await loadAIContent()
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 12))
+                                Text("Refresh AI Status")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundColor(.vetCanyon)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.vetCanyon.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                        .padding(.top, 4)
                     }
                 }
             }
@@ -188,13 +292,145 @@ struct HomeView: View {
                 .foregroundColor(.vetTitle)
 
             VStack(spacing: 12) {
-                ForEach(remindersMock) { reminder in
-                    ReminderRow(reminder: reminder)
+                if isLoadingAI && !hasLoadedAI {
+                    HStack {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Generating reminders...")
+                            .font(.system(size: 13))
+                            .foregroundColor(.vetSubtitle)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                } else if allReminders.isEmpty && !isLoadingAI {
+                    // Fallback to static reminders
+                    ForEach(remindersMock) { reminder in
+                        ReminderRow(reminder: reminder)
+                    }
+                } else if !allReminders.isEmpty {
+                    ForEach(allReminders.prefix(5)) { reminder in
+                        ReminderRow(reminder: reminder)
+                    }
+                } else {
+                    Text("No reminders")
+                        .font(.system(size: 13))
+                        .foregroundColor(.vetSubtitle)
+                        .frame(maxWidth: .infinity)
+                        .padding()
                 }
             }
         }
-                            .padding(.horizontal, 18)
-                    }
+        .padding(.horizontal, 18)
+    }
+    
+    // MARK: - AI Content Loading
+    
+    private func loadAIContent() async {
+        guard !petViewModel.pets.isEmpty else {
+            print("⚠️ No pets to generate AI content for")
+            return
+        }
+        
+        print("🤖 Starting AI content generation for \(petViewModel.pets.count) pets")
+        
+        await MainActor.run {
+            isLoadingAI = true
+            aiError = nil
+        }
+        
+        // Request calendar access if needed
+        if calendarManager.authorizationStatus != .authorized {
+            print("📅 Requesting calendar access...")
+            _ = await calendarManager.requestAccess()
+        }
+        
+        var tips: [PetTip] = []
+        var statuses: [String: PetStatus] = [:]
+        var reminders: [PetReminder] = []
+        var hasError = false
+        
+        // Load content for each pet
+        // Note: Rate limiting is now handled centrally in GeminiService
+        // The service ensures max 2 requests per minute with proper delays
+        
+        // First, load all calendar events
+        for pet in petViewModel.pets {
+            if calendarManager.authorizationStatus == .authorized {
+                await calendarManager.loadEvents(for: pet.id)
+            }
+        }
+        
+        // Generate tips for all pets
+        // GeminiService will handle rate limiting automatically
+        print("💡 Generating tips for all pets...")
+        for (index, pet) in petViewModel.pets.enumerated() {
+            print("🤖 Processing tip \(index + 1)/\(petViewModel.pets.count) for \(pet.name)")
+            
+            var calendarEvents: [PetCalendarEvent] = []
+            if calendarManager.authorizationStatus == .authorized {
+                calendarEvents = calendarManager.events.filter { $0.petId == pet.id }
+            }
+            
+            if let tip = await aiViewModel.generateHomeTips(for: pet, calendarEvents: calendarEvents) {
+                print("✅ Generated tip: \(tip.title)")
+                tips.append(tip)
+            } else {
+                print("⚠️ Failed to generate tip for \(pet.name)")
+                if let error = aiViewModel.error {
+                    print("❌ Error: \(error)")
+                    hasError = true
+                }
+            }
+        }
+        
+        // Generate statuses for all pets
+        print("📊 Generating statuses for all pets...")
+        for (index, pet) in petViewModel.pets.enumerated() {
+            print("🤖 Processing status \(index + 1)/\(petViewModel.pets.count) for \(pet.name)")
+            
+            var calendarEvents: [PetCalendarEvent] = []
+            if calendarManager.authorizationStatus == .authorized {
+                calendarEvents = calendarManager.events.filter { $0.petId == pet.id }
+            }
+            
+            let status = await aiViewModel.generatePetStatus(for: pet, calendarEvents: calendarEvents)
+            print("✅ Generated status: \(status.status)")
+            statuses[pet.id] = status
+        }
+        
+        // Generate reminders for all pets
+        print("🔔 Generating reminders for all pets...")
+        for (index, pet) in petViewModel.pets.enumerated() {
+            print("🤖 Processing reminders \(index + 1)/\(petViewModel.pets.count) for \(pet.name)")
+            
+            var calendarEvents: [PetCalendarEvent] = []
+            if calendarManager.authorizationStatus == .authorized {
+                calendarEvents = calendarManager.events.filter { $0.petId == pet.id }
+            }
+            
+            let petReminders = await aiViewModel.generateHomeReminders(for: pet, calendarEvents: calendarEvents)
+            print("✅ Generated \(petReminders.count) reminders for \(pet.name)")
+            reminders.append(contentsOf: petReminders)
+        }
+        
+        await MainActor.run {
+            if hasError && tips.isEmpty {
+                self.aiError = aiViewModel.error ?? "Failed to generate AI content"
+            } else {
+                self.aiError = nil
+            }
+            self.petTips = tips
+            self.petStatuses = statuses
+            self.allReminders = reminders.sorted { $0.date < $1.date }
+            self.isLoadingAI = false
+            self.hasLoadedAI = true
+            
+            print("🤖 AI content generation complete:")
+            print("   - Tips: \(tips.count)")
+            print("   - Statuses: \(statuses.count)")
+            print("   - Reminders: \(reminders.count)")
+        }
+    }
 
   /*  private var quickActionsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -373,6 +609,7 @@ private func extractBase64String(from photoString: String) -> String? {
 
 struct PetStatusRow: View {
     let pet: Pet
+    let status: PetStatus?
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -393,19 +630,27 @@ struct PetStatusRow: View {
                 Text(pet.name)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.vetTitle)
-                Text("✓ Up-to-date | \(pet.medsCount) med | \(pet.weightText)")
+                Text(status?.summary ?? "✓ Up-to-date | \(pet.medsCount) med | \(pet.weightText)")
                     .font(.system(size: 12))
                     .foregroundColor(.vetSubtitle)
             }
 
             Spacer(minLength: 10)
 
-            Pill(text: "Healthy",
-                 bg: Color.green.opacity(0.12),
-                 fg: Color.green.darker())
-            Pill(text: "Due Soon",
-                 bg: Color.vetCanyon.opacity(0.14),
-                 fg: Color.vetCanyon)
+            // Use AI-generated pills or fallback
+            if let status = status, !status.pills.isEmpty {
+                ForEach(Array(status.pills.enumerated()), id: \.offset) { _, pill in
+                    Pill(text: pill.text, bg: pill.bg, fg: pill.fg)
+                }
+            } else {
+                // Fallback pills
+                Pill(text: "Healthy",
+                     bg: Color.green.opacity(0.12),
+                     fg: Color.green.darker())
+                Pill(text: "Due Soon",
+                     bg: Color.vetCanyon.opacity(0.14),
+                     fg: Color.vetCanyon)
+            }
         }
         .padding(12)
         .background(Color.vetCardBackground)
@@ -444,6 +689,15 @@ struct PetStatusRow: View {
 
 struct DailyTipCard: View {
     let tip: DailyTip
+    
+    init(tip: DailyTip) {
+        self.tip = tip
+    }
+    
+    init(tip: PetTip) {
+        // Convert PetTip to DailyTip for compatibility
+        self.tip = DailyTip(emoji: tip.emoji, title: tip.title, detail: tip.detail)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -474,6 +728,21 @@ struct DailyTipCard: View {
 
 struct ReminderRow: View {
     let reminder: Reminder
+    
+    init(reminder: Reminder) {
+        self.reminder = reminder
+    }
+    
+    init(reminder: PetReminder) {
+        // Convert PetReminder to Reminder for compatibility
+        self.reminder = Reminder(
+            icon: reminder.icon,
+            title: reminder.title,
+            detail: reminder.detail,
+            date: reminder.date,
+            tint: reminder.tint
+        )
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
