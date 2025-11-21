@@ -43,7 +43,7 @@ struct HomeView: View {
     
     // Auto-refresh
     @State private var refreshTask: Task<Void, Never>?
-    private let refreshInterval: TimeInterval = 5 * 60 // 5 minutes
+    private let refreshInterval: TimeInterval = 60 * 60 // 1 hour
 
     var body: some View {
         ZStack {
@@ -116,7 +116,7 @@ struct HomeView: View {
                 }
             }
             
-            // Start auto-refresh timer (every 5 minutes)
+            // Start auto-refresh timer (every 1 hour)
             startAutoRefresh()
         }
         .onDisappear {
@@ -231,6 +231,18 @@ struct HomeView: View {
                     }
                     .padding(.vertical, 2)
                 }
+            } else if petViewModel.pets.isEmpty {
+                // No pets - show empty state
+                VStack(spacing: 8) {
+                    Text("No tips or recommendations")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.vetSubtitle)
+                    Text("Add a pet to get personalized tips")
+                        .font(.system(size: 12))
+                        .foregroundColor(.vetSubtitle.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
             } else {
                 // Fallback to static tips if AI not loaded and no cached tips
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -323,17 +335,25 @@ struct HomeView: View {
                     ForEach(allReminders.prefix(5)) { reminder in
                         ReminderRow(reminder: reminder)
                     }
-                } else if allReminders.isEmpty && !isLoadingAI {
-                    // Fallback to static reminders if no AI reminders and not loading
-                    ForEach(remindersMock) { reminder in
-                        ReminderRow(reminder: reminder)
-                    }
-                } else {
+                } else if petViewModel.pets.isEmpty {
+                    // No pets
                     Text("No reminders")
                         .font(.system(size: 13))
                         .foregroundColor(.vetSubtitle)
                         .frame(maxWidth: .infinity)
                         .padding()
+                } else {
+                    // No reminders generated - show empty state
+                    VStack(spacing: 8) {
+                        Text("No reminders coming soon")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.vetSubtitle)
+                        Text("All scheduled care is up to date")
+                            .font(.system(size: 12))
+                            .foregroundColor(.vetSubtitle.opacity(0.7))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
                 }
             }
         }
@@ -346,10 +366,10 @@ struct HomeView: View {
         // Stop existing task if any
         stopAutoRefresh()
         
-        // Create async task that refreshes every 5 minutes
+        // Create async task that refreshes every 1 hour
         refreshTask = Task {
             while !Task.isCancelled {
-                // Wait 5 minutes
+                // Wait 1 hour
                 try? await Task.sleep(nanoseconds: UInt64(refreshInterval * 1_000_000_000))
                 
                 // Check if task was cancelled
@@ -359,7 +379,7 @@ struct HomeView: View {
                 guard !petViewModel.pets.isEmpty, session.isAuthenticated else { continue }
                 
                 await MainActor.run {
-                    print("🔄 Auto-refreshing AI content (5-minute interval)")
+                    print("🔄 Auto-refreshing AI content (1-hour interval)")
                 }
                 
                 await loadAIContent(silent: true) // Silent refresh - don't show loading if we have cached content
@@ -414,65 +434,72 @@ struct HomeView: View {
             }
         }
         
-        // Generate tips for all pets
-        // GeminiService will handle rate limiting automatically
-        print("💡 Generating tips for all pets...")
+        // Process each pet completely: tips → recommendations → status → reminders
+        // This ensures each pet's data is shown together before moving to the next
+        print("🤖 Processing AI content for each pet (tips → recommendations → status → reminders)...")
         for (index, pet) in petViewModel.pets.enumerated() {
-            print("🤖 Processing tip \(index + 1)/\(petViewModel.pets.count) for \(pet.name)")
+            print("🐾 Processing pet \(index + 1)/\(petViewModel.pets.count): \(pet.name)")
             
             var calendarEvents: [PetCalendarEvent] = []
             if calendarManager.authorizationStatus == .authorized {
                 calendarEvents = calendarManager.events.filter { $0.petId == pet.id }
             }
             
+            // 1. Generate tip for this pet
+            print("  💡 Generating tip for \(pet.name)...")
             if let tip = await aiViewModel.generateHomeTips(for: pet, calendarEvents: calendarEvents) {
-                print("✅ Generated tip for \(pet.name): \(tip.title) - \(tip.detail.prefix(50))...")
+                print("  ✅ Generated tip: \(tip.title)")
                 tips.append(tip)
                 
                 // Update UI immediately when we get a tip (progressive loading)
                 await MainActor.run {
                     if !tips.isEmpty {
                         self.petTips = tips
-                        print("🔄 Progressively updated tips: \(tips.count) tips now visible")
                     }
                 }
             } else {
-                print("⚠️ Failed to generate tip for \(pet.name)")
+                print("  ⚠️ Failed to generate tip for \(pet.name)")
                 if let error = aiViewModel.error {
-                    print("❌ Error: \(error)")
+                    print("  ❌ Error: \(error)")
                     hasError = true
                 }
             }
-        }
-        
-        // Generate statuses for all pets
-        print("📊 Generating statuses for all pets...")
-        for (index, pet) in petViewModel.pets.enumerated() {
-            print("🤖 Processing status \(index + 1)/\(petViewModel.pets.count) for \(pet.name)")
             
-            var calendarEvents: [PetCalendarEvent] = []
-            if calendarManager.authorizationStatus == .authorized {
-                calendarEvents = calendarManager.events.filter { $0.petId == pet.id }
-            }
+            // 2. Generate recommendations for this pet (if needed)
+            // Note: Recommendations might be generated separately, skipping for now
             
+            // 3. Generate status for this pet (right after tips/recommendations)
+            print("  📊 Generating status for \(pet.name)...")
             let status = await aiViewModel.generatePetStatus(for: pet, calendarEvents: calendarEvents)
-            print("✅ Generated status: \(status.status)")
+            print("  ✅ Generated status: \(status.status) with \(status.pills.count) pills")
             statuses[pet.id] = status
-        }
-        
-        // Generate reminders for all pets
-        print("🔔 Generating reminders for all pets...")
-        for (index, pet) in petViewModel.pets.enumerated() {
-            print("🤖 Processing reminders \(index + 1)/\(petViewModel.pets.count) for \(pet.name)")
             
-            var calendarEvents: [PetCalendarEvent] = []
-            if calendarManager.authorizationStatus == .authorized {
-                calendarEvents = calendarManager.events.filter { $0.petId == pet.id }
+            // Update UI immediately with status for this pet
+            await MainActor.run {
+                self.petStatuses[pet.id] = status
             }
             
+            // 4. Generate reminders for this pet
+            print("  🔔 Generating reminders for \(pet.name)...")
             let petReminders = await aiViewModel.generateHomeReminders(for: pet, calendarEvents: calendarEvents)
-            print("✅ Generated \(petReminders.count) reminders for \(pet.name)")
+            print("  ✅ Generated \(petReminders.count) reminders")
             reminders.append(contentsOf: petReminders)
+            
+            // Update UI immediately with reminders
+            await MainActor.run {
+                let existingReminders = self.allReminders
+                let allReminders = (existingReminders + petReminders).sorted { $0.date < $1.date }
+                var uniqueReminders: [PetReminder] = []
+                var seen = Set<String>()
+                for reminder in allReminders {
+                    let key = "\(reminder.title)-\(reminder.date.timeIntervalSince1970)"
+                    if !seen.contains(key) {
+                        seen.insert(key)
+                        uniqueReminders.append(reminder)
+                    }
+                }
+                self.allReminders = uniqueReminders
+            }
         }
         
         await MainActor.run {
@@ -491,8 +518,9 @@ struct HomeView: View {
                 // Merge new statuses with existing ones (don't lose statuses for pets we didn't process)
                 for (petId, status) in statuses {
                     self.petStatuses[petId] = status
+                    print("✅ Updated status for pet \(petId): \(status.status) with pills: \(status.pills.map { $0.text }.joined(separator: ", "))")
                 }
-                print("✅ Updated statuses: \(statuses.count)")
+                print("✅ Updated statuses: \(statuses.count) total")
             }
             
             if !reminders.isEmpty {

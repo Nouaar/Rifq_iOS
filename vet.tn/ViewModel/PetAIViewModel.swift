@@ -375,17 +375,40 @@ final class PetAIViewModel: ObservableObject {
             do {
                 print("🌐 Calling backend AI service for status...")
                 let response = try await aiService.getStatus(petId: pet.id, accessToken: accessToken)
-                print("✅ Received status response from backend")
+                print("✅ Received status response from backend:")
+                print("   Status: \(response.status)")
+                print("   Summary: \(response.summary)")
+                print("   Pills: \(response.pills.map { $0.text }.joined(separator: ", "))")
                 
                 isLoading = false
                 
                 // Convert backend response to PetStatus
-                let pills = response.pills.map { pill in
+                var pills = response.pills.map { pill in
                     StatusPillData(
                         text: pill.text,
                         bg: Color(hex: pill.bg) ?? Color.green.opacity(0.12),
                         fg: Color(hex: pill.fg) ?? Color.green.darker()
                     )
+                }
+                
+                // Add "Due Soon" pill if there are upcoming calendar events for THIS pet
+                let upcomingEvents = calendarEvents.filter { 
+                    $0.date >= Date() && 
+                    $0.date <= Date().addingTimeInterval(86400 * 7) 
+                }
+                if !upcomingEvents.isEmpty {
+                    // Check if "Due Soon" already exists in pills
+                    let hasDueSoon = pills.contains { $0.text == "Due Soon" }
+                    if !hasDueSoon {
+                        pills.append(StatusPillData(
+                            text: "Due Soon",
+                            bg: Color.vetCanyon.opacity(0.14),
+                            fg: Color.vetCanyon
+                        ))
+                        print("  📅 Added 'Due Soon' pill for \(pet.name) (\(upcomingEvents.count) upcoming events)")
+                    }
+                } else {
+                    print("  📅 No upcoming events for \(pet.name) - not adding 'Due Soon' pill")
                 }
                 
                 print("✅ Generated status: \(response.status) with \(pills.count) pills")
@@ -414,7 +437,17 @@ final class PetAIViewModel: ObservableObject {
             
             // Parse status (should be short like "Healthy", "Needs Attention", "Due for Checkup")
             let status = parseStatus(statusText)
-            let pills = generateStatusPills(for: pet, calendarEvents: calendarEvents, status: status)
+            var pills = generateStatusPills(for: pet, calendarEvents: calendarEvents, status: status)
+            
+            // Ensure "Due Soon" only shows if there are actual upcoming events
+            let upcomingEvents = calendarEvents.filter { 
+                $0.date >= Date() && 
+                $0.date <= Date().addingTimeInterval(86400 * 7) 
+            }
+            if upcomingEvents.isEmpty {
+                // Remove "Due Soon" if it was added but there are no events
+                pills = pills.filter { $0.text != "Due Soon" }
+            }
             
             print("✅ Generated status: \(status) with \(pills.count) pills")
             return PetStatus(
@@ -445,10 +478,14 @@ final class PetAIViewModel: ObservableObject {
                 let response = try await aiService.getReminders(petId: pet.id, accessToken: accessToken)
                 print("✅ Received reminders response from backend")
                 
+                print("📋 Backend returned \(response.reminders.count) reminders")
+                
                 // Convert backend reminders to PetReminder
                 let reminders = response.reminders.map { reminder in
                     let dateFormatter = ISO8601DateFormatter()
                     let date = dateFormatter.date(from: reminder.date) ?? Date()
+                    
+                    print("   - Reminder: \(reminder.title) - \(reminder.detail.prefix(50))")
                     
                     return PetReminder(
                         id: UUID(),
@@ -478,7 +515,7 @@ final class PetAIViewModel: ObservableObject {
                 
                 let allReminders = (reminders + calendarReminders).sorted { $0.date < $1.date }
                 
-                print("✅ Parsed \(allReminders.count) reminders")
+                print("✅ Parsed \(allReminders.count) total reminders (\(reminders.count) AI + \(calendarReminders.count) calendar)")
                 isLoading = false
                 return allReminders
             } catch {
