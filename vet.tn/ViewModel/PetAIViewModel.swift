@@ -22,7 +22,9 @@ final class PetAIViewModel: ObservableObject {
     @Published var petStatuses: [String: PetStatus] = [:] // petId -> status
     @Published var petReminders: [String: [PetReminder]] = [:] // petId -> reminders
     
-    private let geminiService = GeminiService.shared
+    private let aiService = AIService.shared
+    private let geminiService = GeminiService.shared // Keep as fallback
+    weak var sessionManager: SessionManager?
     
     // MARK: - Generate Pet Tips
     
@@ -267,12 +269,72 @@ final class PetAIViewModel: ObservableObject {
         isLoading = true
         error = nil
         
+        // Try backend first, fallback to direct Gemini if no session
+        if let session = sessionManager,
+           let accessToken = session.tokens?.accessToken {
+            do {
+                print("🌐 Calling backend AI service for tip...")
+                let response = try await aiService.getTips(petId: pet.id, accessToken: accessToken)
+                print("✅ Received response from backend")
+                
+                if let firstTip = response.tips.first {
+                    isLoading = false
+                    let tip = PetTip(
+                        id: UUID(),
+                        emoji: firstTip.emoji,
+                        title: firstTip.title,
+                        detail: firstTip.detail
+                    )
+                    print("✅ Returning tip: \(tip.title)")
+                    return tip
+                }
+                print("⚠️ No tips in backend response")
+                isLoading = false
+                return nil
+            } catch {
+                // Check if it's a timeout error - don't fallback, just return nil
+                if let urlError = error as? URLError, urlError.code == .timedOut {
+                    print("⚠️ Backend AI call timed out (likely rate-limited). Please try again later.")
+                    isLoading = false
+                    return nil
+                }
+                
+                // Check if it's a 401 Unauthorized error
+                if let apiError = error as? APIClient.APIError,
+                   case .http(let status, _) = apiError {
+                    if status == 401 {
+                        print("⚠️ Authentication failed (401), session may need refresh.")
+                    } else if status == 503 {
+                        print("⚠️ Backend AI service temporarily unavailable (rate-limited). Please try again later.")
+                        isLoading = false
+                        return nil
+                    } else {
+                        print("⚠️ Backend AI call failed with status \(status)")
+                    }
+                } else {
+                    print("⚠️ Backend AI call failed: \(error)")
+                }
+                
+                // Only fallback to direct Gemini if we have a valid API key
+                // Check if we should try direct Gemini (only if not a timeout or 503)
+                if let urlError = error as? URLError, urlError.code == .timedOut {
+                    // Don't fallback on timeout
+                    isLoading = false
+                    return nil
+                }
+            }
+        } else {
+            print("⚠️ No session or access token available")
+            isLoading = false
+            return nil
+        }
+        
+        // Fallback to direct Gemini API (only if backend failed and it's not a timeout)
         let prompt = buildHomeTipsPrompt(for: pet, calendarEvents: calendarEvents)
         print("📝 Tip prompt built (\(prompt.count) chars)")
         
         do {
-            print("🌐 Calling Gemini API for tip...")
-            // Increased maxTokens to account for "thoughts" tokens used by gemini-2.5-pro
+            print("🌐 Calling Gemini API directly for tip...")
             let response = try await geminiService.generateText(prompt: prompt, temperature: 0.8, maxTokens: 800)
             print("✅ Received response: \(response.prefix(100))...")
             let tips = parseListResponse(response)
@@ -307,12 +369,43 @@ final class PetAIViewModel: ObservableObject {
         isLoading = true
         error = nil
         
+        // Try backend first, fallback to direct Gemini if no session
+        if let session = sessionManager,
+           let accessToken = session.tokens?.accessToken {
+            do {
+                print("🌐 Calling backend AI service for status...")
+                let response = try await aiService.getStatus(petId: pet.id, accessToken: accessToken)
+                print("✅ Received status response from backend")
+                
+                isLoading = false
+                
+                // Convert backend response to PetStatus
+                let pills = response.pills.map { pill in
+                    StatusPillData(
+                        text: pill.text,
+                        bg: Color(hex: pill.bg) ?? Color.green.opacity(0.12),
+                        fg: Color(hex: pill.fg) ?? Color.green.darker()
+                    )
+                }
+                
+                print("✅ Generated status: \(response.status) with \(pills.count) pills")
+                return PetStatus(
+                    status: response.status,
+                    pills: pills,
+                    summary: response.summary
+                )
+            } catch {
+                print("⚠️ Backend AI call failed, falling back to direct Gemini: \(error)")
+                // Fall through to direct Gemini call
+            }
+        }
+        
+        // Fallback to direct Gemini API
         let prompt = buildStatusPrompt(for: pet, calendarEvents: calendarEvents)
         print("📝 Status prompt built (\(prompt.count) chars)")
         
         do {
-            print("🌐 Calling Gemini API for status...")
-            // Increased maxTokens to account for "thoughts" tokens used by gemini-2.5-pro
+            print("🌐 Calling Gemini API directly for status...")
             let response = try await geminiService.generateText(prompt: prompt, temperature: 0.6, maxTokens: 400)
             print("✅ Received status response: \(response)")
             let statusText = response.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -344,12 +437,62 @@ final class PetAIViewModel: ObservableObject {
         isLoading = true
         error = nil
         
+        // Try backend first, fallback to direct Gemini if no session
+        if let session = sessionManager,
+           let accessToken = session.tokens?.accessToken {
+            do {
+                print("🌐 Calling backend AI service for reminders...")
+                let response = try await aiService.getReminders(petId: pet.id, accessToken: accessToken)
+                print("✅ Received reminders response from backend")
+                
+                // Convert backend reminders to PetReminder
+                let reminders = response.reminders.map { reminder in
+                    let dateFormatter = ISO8601DateFormatter()
+                    let date = dateFormatter.date(from: reminder.date) ?? Date()
+                    
+                    return PetReminder(
+                        id: UUID(),
+                        icon: reminder.icon,
+                        title: reminder.title,
+                        detail: reminder.detail,
+                        date: date,
+                        tint: Color(hex: reminder.tint) ?? Color.purple
+                    )
+                }
+                
+                // Merge with calendar events
+                let calendarReminders = calendarEvents
+                    .filter { $0.date >= Date() }
+                    .sorted { $0.date < $1.date }
+                    .prefix(3)
+                    .map { event in
+                        PetReminder(
+                            id: UUID(),
+                            icon: event.type.icon,
+                            title: "\(pet.name) • \(event.title)",
+                            detail: event.type.displayName,
+                            date: event.date,
+                            tint: getColorForEventType(event.type)
+                        )
+                    }
+                
+                let allReminders = (reminders + calendarReminders).sorted { $0.date < $1.date }
+                
+                print("✅ Parsed \(allReminders.count) reminders")
+                isLoading = false
+                return allReminders
+            } catch {
+                print("⚠️ Backend AI call failed, falling back to direct Gemini: \(error)")
+                // Fall through to direct Gemini call
+            }
+        }
+        
+        // Fallback to direct Gemini API
         let prompt = buildHomeRemindersPrompt(for: pet, calendarEvents: calendarEvents)
         print("📝 Reminders prompt built (\(prompt.count) chars)")
         
         do {
-            print("🌐 Calling Gemini API for reminders...")
-            // Increased maxTokens to account for "thoughts" tokens used by gemini-2.5-pro
+            print("🌐 Calling Gemini API directly for reminders...")
             let response = try await geminiService.generateText(prompt: prompt, temperature: 0.7, maxTokens: 800)
             print("✅ Received reminders response: \(response.prefix(200))...")
             let reminders = parseRemindersResponse(response, pet: pet, calendarEvents: calendarEvents)

@@ -152,8 +152,8 @@ final class GeminiService {
             guard let httpResponse = response as? HTTPURLResponse,
                   (200...299).contains(httpResponse.statusCode) else {
                 print("⚠️ Failed to list models, using fallback")
-                // Fallback to common model names
-                let fallbackModels = ["gemini-pro", "models/gemini-pro", "gemini-1.5-pro", "models/gemini-1.5-pro"]
+                // Fallback to common model names (prioritize Flash models for better quotas)
+                let fallbackModels = ["gemini-1.5-flash", "models/gemini-1.5-flash", "gemini-2.5-flash", "models/gemini-2.5-flash", "gemini-pro-latest", "models/gemini-pro-latest", "gemini-1.5-pro", "models/gemini-1.5-pro"]
                 for model in fallbackModels {
                     if await testModel(model) {
                         cachedModelName = model
@@ -168,8 +168,8 @@ final class GeminiService {
                let models = json["models"] as? [[String: Any]] {
                 print("📋 Found \(models.count) available models")
                 
-                // Look for models that support generateContent
-                let preferredNames = ["gemini-pro", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"]
+                // Look for models that support generateContent (prioritize Flash models for better free tier quotas)
+                let preferredNames = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-pro-latest", "gemini-pro", "gemini-1.5-pro", "gemini-1.0-pro"]
                 for preferredName in preferredNames {
                     if let model = models.first(where: { 
                         let name = ($0["name"] as? String) ?? ""
@@ -195,14 +195,14 @@ final class GeminiService {
                 }
             }
             
-            // Fallback
+            // Fallback to flash model (better free tier quotas)
             print("⚠️ Could not parse models list, using fallback")
-            cachedModelName = "gemini-pro"
-            return "gemini-pro"
+            cachedModelName = "gemini-1.5-flash"
+            return "gemini-1.5-flash"
         } catch {
             print("⚠️ Error listing models: \(error.localizedDescription)")
-            cachedModelName = "gemini-pro"
-            return "gemini-pro"
+            cachedModelName = "gemini-1.5-flash"
+            return "gemini-1.5-flash"
         }
     }
     
@@ -365,6 +365,13 @@ final class GeminiService {
                         }
                     }
                 }
+            }
+            
+            // Handle leaked API key (403) - don't retry, fail immediately
+            if httpResponse.statusCode == 403 {
+                let message = errorMessage ?? "API key is invalid or has been revoked"
+                print("❌ Gemini API key is invalid or leaked (403). Please use backend API or get a new key.")
+                throw GeminiError.apiError(message)
             }
             
             // Handle rate limiting (429) with suggested retry delay

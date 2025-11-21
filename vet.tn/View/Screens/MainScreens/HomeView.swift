@@ -40,6 +40,10 @@ struct HomeView: View {
     @State private var isLoadingAI = false
     @State private var aiError: String?
     @State private var hasLoadedAI = false
+    
+    // Auto-refresh
+    @State private var refreshTask: Task<Void, Never>?
+    private let refreshInterval: TimeInterval = 5 * 60 // 5 minutes
 
     var body: some View {
         ZStack {
@@ -93,6 +97,7 @@ struct HomeView: View {
         }
         .onAppear {
             petViewModel.sessionManager = session
+            aiViewModel.sessionManager = session
             chatManager.setSessionManager(session)
             chatManager.startPolling()
             notificationManager.setSessionManager(session)
@@ -110,6 +115,13 @@ struct HomeView: View {
                     await loadAIContent()
                 }
             }
+            
+            // Start auto-refresh timer (every 5 minutes)
+            startAutoRefresh()
+        }
+        .onDisappear {
+            // Stop timer when view disappears
+            stopAutoRefresh()
         }
         .task(id: session.user?.id) {
             // Only load pets when user ID changes, not on every appear
@@ -182,7 +194,8 @@ struct HomeView: View {
                 .buttonStyle(.plain)
             }
 
-            if isLoadingAI && !hasLoadedAI {
+            if isLoadingAI && !hasLoadedAI && petTips.isEmpty {
+                // Only show loading if we don't have any tips yet
                 HStack {
                     ProgressView()
                         .scaleEffect(0.8)
@@ -192,7 +205,8 @@ struct HomeView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
-            } else if let error = aiError {
+            } else if let error = aiError, petTips.isEmpty {
+                // Only show error if we don't have cached tips
                 VStack(spacing: 8) {
                     Text("AI unavailable")
                         .font(.system(size: 13, weight: .medium))
@@ -207,20 +221,21 @@ struct HomeView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
-            } else if petTips.isEmpty {
-                // Fallback to static tips if AI not loaded
+            } else if !petTips.isEmpty {
+                // Show AI-generated tips
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 14) {
-                        ForEach(dailyTipsMock) { tip in
+                        ForEach(petTips) { tip in
                             DailyTipCard(tip: tip)
                         }
                     }
                     .padding(.vertical, 2)
                 }
             } else {
+                // Fallback to static tips if AI not loaded and no cached tips
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 14) {
-                        ForEach(petTips) { tip in
+                        ForEach(dailyTipsMock) { tip in
                             DailyTipCard(tip: tip)
                         }
                     }
@@ -292,7 +307,8 @@ struct HomeView: View {
                 .foregroundColor(.vetTitle)
 
             VStack(spacing: 12) {
-                if isLoadingAI && !hasLoadedAI {
+                if isLoadingAI && !hasLoadedAI && allReminders.isEmpty {
+                    // Only show loading if we don't have any reminders yet
                     HStack {
                         ProgressView()
                             .scaleEffect(0.8)
@@ -302,13 +318,14 @@ struct HomeView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
-                } else if allReminders.isEmpty && !isLoadingAI {
-                    // Fallback to static reminders
-                    ForEach(remindersMock) { reminder in
+                } else if !allReminders.isEmpty {
+                    // Show AI-generated reminders
+                    ForEach(allReminders.prefix(5)) { reminder in
                         ReminderRow(reminder: reminder)
                     }
-                } else if !allReminders.isEmpty {
-                    ForEach(allReminders.prefix(5)) { reminder in
+                } else if allReminders.isEmpty && !isLoadingAI {
+                    // Fallback to static reminders if no AI reminders and not loading
+                    ForEach(remindersMock) { reminder in
                         ReminderRow(reminder: reminder)
                     }
                 } else {
@@ -323,18 +340,55 @@ struct HomeView: View {
         .padding(.horizontal, 18)
     }
     
+    // MARK: - Auto-Refresh Timer
+    
+    private func startAutoRefresh() {
+        // Stop existing task if any
+        stopAutoRefresh()
+        
+        // Create async task that refreshes every 5 minutes
+        refreshTask = Task {
+            while !Task.isCancelled {
+                // Wait 5 minutes
+                try? await Task.sleep(nanoseconds: UInt64(refreshInterval * 1_000_000_000))
+                
+                // Check if task was cancelled
+                guard !Task.isCancelled else { break }
+                
+                // Only refresh if we have pets and are authenticated
+                guard !petViewModel.pets.isEmpty, session.isAuthenticated else { continue }
+                
+                await MainActor.run {
+                    print("🔄 Auto-refreshing AI content (5-minute interval)")
+                }
+                
+                await loadAIContent(silent: true) // Silent refresh - don't show loading if we have cached content
+            }
+        }
+        
+        print("⏰ Started auto-refresh task (every \(Int(refreshInterval / 60)) minutes)")
+    }
+    
+    private func stopAutoRefresh() {
+        refreshTask?.cancel()
+        refreshTask = nil
+    }
+    
     // MARK: - AI Content Loading
     
-    private func loadAIContent() async {
+    private func loadAIContent(silent: Bool = false) async {
         guard !petViewModel.pets.isEmpty else {
             print("⚠️ No pets to generate AI content for")
             return
         }
         
-        print("🤖 Starting AI content generation for \(petViewModel.pets.count) pets")
+        print("🤖 Starting AI content generation for \(petViewModel.pets.count) pets (silent: \(silent))")
         
         await MainActor.run {
-            isLoadingAI = true
+            // Only show loading if not silent and we don't have cached content
+            if !silent || (petTips.isEmpty && allReminders.isEmpty) {
+                isLoadingAI = true
+            }
             aiError = nil
         }
         
@@ -372,8 +426,16 @@ struct HomeView: View {
             }
             
             if let tip = await aiViewModel.generateHomeTips(for: pet, calendarEvents: calendarEvents) {
-                print("✅ Generated tip: \(tip.title)")
+                print("✅ Generated tip for \(pet.name): \(tip.title) - \(tip.detail.prefix(50))...")
                 tips.append(tip)
+                
+                // Update UI immediately when we get a tip (progressive loading)
+                await MainActor.run {
+                    if !tips.isEmpty {
+                        self.petTips = tips
+                        print("🔄 Progressively updated tips: \(tips.count) tips now visible")
+                    }
+                }
             } else {
                 print("⚠️ Failed to generate tip for \(pet.name)")
                 if let error = aiViewModel.error {
@@ -414,21 +476,58 @@ struct HomeView: View {
         }
         
         await MainActor.run {
-            if hasError && tips.isEmpty {
+            print("🔄 Updating UI state - Tips collected: \(tips.count), Current tips: \(self.petTips.count)")
+            
+            // Always update if we got new content, otherwise keep old content
+            if !tips.isEmpty {
+                self.petTips = tips
+                print("✅ Updated tips: \(tips.count) - \(tips.map { $0.title }.joined(separator: ", "))")
+                print("   Tip details: \(tips.map { "\($0.title): \($0.detail.prefix(30))..." }.joined(separator: " | "))")
+            } else if !silent {
+                print("⚠️ No new tips generated, keeping existing \(self.petTips.count) tips")
+            }
+            
+            if !statuses.isEmpty {
+                // Merge new statuses with existing ones (don't lose statuses for pets we didn't process)
+                for (petId, status) in statuses {
+                    self.petStatuses[petId] = status
+                }
+                print("✅ Updated statuses: \(statuses.count)")
+            }
+            
+            if !reminders.isEmpty {
+                // Merge reminders and sort
+                let existingReminders = self.allReminders
+                let allReminders = (existingReminders + reminders).sorted { $0.date < $1.date }
+                // Remove duplicates based on title and date
+                var uniqueReminders: [PetReminder] = []
+                var seen = Set<String>()
+                for reminder in allReminders {
+                    let key = "\(reminder.title)-\(reminder.date.timeIntervalSince1970)"
+                    if !seen.contains(key) {
+                        seen.insert(key)
+                        uniqueReminders.append(reminder)
+                    }
+                }
+                self.allReminders = uniqueReminders
+                print("✅ Updated reminders: \(reminders.count) new, \(self.allReminders.count) total")
+            } else if !silent {
+                print("⚠️ No new reminders generated, keeping existing \(self.allReminders.count) reminders")
+            }
+            
+            if hasError && tips.isEmpty && self.petTips.isEmpty {
                 self.aiError = aiViewModel.error ?? "Failed to generate AI content"
             } else {
                 self.aiError = nil
             }
-            self.petTips = tips
-            self.petStatuses = statuses
-            self.allReminders = reminders.sorted { $0.date < $1.date }
+            
             self.isLoadingAI = false
             self.hasLoadedAI = true
             
             print("🤖 AI content generation complete:")
-            print("   - Tips: \(tips.count)")
-            print("   - Statuses: \(statuses.count)")
-            print("   - Reminders: \(reminders.count)")
+            print("   - Tips: \(self.petTips.count) - Displaying: \(self.petTips.map { $0.title }.joined(separator: ", "))")
+            print("   - Statuses: \(self.petStatuses.count)")
+            print("   - Reminders: \(self.allReminders.count)")
         }
     }
 
