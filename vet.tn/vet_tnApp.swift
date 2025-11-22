@@ -10,9 +10,24 @@ import CoreData
 import Combine
 import GoogleSignIn
 import UIKit
+import Firebase
+import FirebaseMessaging
 
 // Handles Google Sign-In callback and push notifications for SwiftUI lifecycle apps
 class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        // Configure Firebase
+        FirebaseApp.configure()
+        
+        // Set FCM delegate
+        Messaging.messaging().delegate = FCMManager.shared
+        
+        return true
+    }
+    
     func application(
         _ application: UIApplication,
         open url: URL,
@@ -22,15 +37,19 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         return GIDSignIn.sharedInstance.handle(url)
     }
     
-    // Handle remote notifications
+    // Handle remote notifications registration
     func application(
         _ application: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
     ) {
-        // TODO: Once Firebase is integrated, pass token to FCM
-        // Messaging.messaging().apnsToken = deviceToken
+        // Pass APNS token to FCM Manager (which forwards to Firebase)
+        Task { @MainActor in
+            FCMManager.shared.setAPNSToken(deviceToken)
+        }
+        
         #if DEBUG
-        print("📱 Device token registered: \(deviceToken.map { String(format: "%02.2hhx", $0) }.joined())")
+        let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
+        print("📱 APNS device token registered: \(tokenString)")
         #endif
     }
     
@@ -67,6 +86,9 @@ struct vet_tnApp: App {
         GIDSignIn.sharedInstance.configuration = GIDConfiguration(
             clientID: "68176423413-uvu0od4sog6hiqnegaer9s44bo4qcgsa.apps.googleusercontent.com"
         )
+        
+        // Set session manager for FCM Manager
+        FCMManager.shared.setSessionManager(session)
         
         // Register for push notifications
         FCMManager.shared.registerForPushNotifications()

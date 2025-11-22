@@ -9,6 +9,8 @@ import Foundation
 import Combine
 import UserNotifications
 import UIKit
+import Firebase
+import FirebaseMessaging
 
 @MainActor
 final class FCMManager: NSObject, ObservableObject {
@@ -18,14 +20,36 @@ final class FCMManager: NSObject, ObservableObject {
     @Published var isRegistered: Bool = false
     
     private weak var sessionManager: SessionManager?
+    private let chatService = ChatService.shared
     
     override init() {
         super.init()
         UNUserNotificationCenter.current().delegate = self
+        
+        // Set FCM delegate
+        Messaging.messaging().delegate = self
+        
+        // Listen for session changes to send token
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("UserDidLogin"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self, let token = self.fcmToken else { return }
+                await self.sendTokenToBackend(token: token)
+            }
+        }
     }
     
     func setSessionManager(_ session: SessionManager) {
         self.sessionManager = session
+        // Send token if we already have one
+        Task {
+            if let token = fcmToken {
+                await sendTokenToBackend(token: token)
+            }
+        }
     }
     
     // MARK: - Registration
@@ -39,6 +63,12 @@ final class FCMManager: NSObject, ObservableObject {
                     #if DEBUG
                     print("✅ Push notification permission granted")
                     #endif
+                    
+                    // Register for remote notifications
+                    DispatchQueue.main.async {
+                        UIApplication.shared.registerForRemoteNotifications()
+                    }
+                    
                     await self.getFCMToken()
                 } else {
                     #if DEBUG
@@ -56,36 +86,32 @@ final class FCMManager: NSObject, ObservableObject {
     }
     
     func getFCMToken() async {
-        // TODO: Get FCM token once Firebase SDK is integrated
-        // Example:
-        /*
         do {
             let token = try await Messaging.messaging().token()
-            await MainActor.run {
-                self.fcmToken = token
-                self.sendTokenToBackend(token: token)
-            }
+            // Since FCMManager is @MainActor, we can directly update properties
+            self.fcmToken = token
+            await self.sendTokenToBackend(token: token)
+            #if DEBUG
+            print("✅ FCM token obtained: \(token)")
+            #endif
         } catch {
             #if DEBUG
             print("❌ Failed to get FCM token: \(error)")
             #endif
         }
-        */
-        
+    }
+    
+    func setAPNSToken(_ deviceToken: Data) {
+        // Forward APNS token to Firebase
+        Messaging.messaging().apnsToken = deviceToken
         #if DEBUG
-        print("📱 FCM token requested")
-        print("⚠️ Firebase SDK not yet integrated. Add 'Firebase/Messaging' via SPM or CocoaPods")
+        let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
+        print("📱 APNS token received and forwarded to Firebase: \(tokenString)")
         #endif
-        
-        // Simulate token for now (remove once Firebase is integrated)
-        let simulatedToken = UUID().uuidString
-        self.fcmToken = simulatedToken
-        await sendTokenToBackend(token: simulatedToken)
     }
     
     private func sendTokenToBackend(token: String) async {
         guard let session = sessionManager,
-              let userId = session.user?.id,
               let accessToken = session.tokens?.accessToken else {
             #if DEBUG
             print("⚠️ Cannot send FCM token: Not authenticated")
@@ -93,19 +119,23 @@ final class FCMManager: NSObject, ObservableObject {
             return
         }
         
-        // TODO: Send token to backend
-        // Example endpoint: POST /users/fcm-token
-        /*
         do {
             let headers = ["Authorization": "Bearer \(accessToken)"]
-            let body = ["fcmToken": token]
+            struct FCMTokenRequest: Encodable {
+                let fcmToken: String?
+            }
+            let body = FCMTokenRequest(fcmToken: token)
+            
             _ = try await APIClient.auth.request(
                 "POST",
                 path: "/users/fcm-token",
                 headers: headers,
                 body: body,
-                responseType: APIClient.Empty.self
+                responseType: APIClient.Empty.self,
+                timeout: 30,
+                retries: 1
             )
+            
             isRegistered = true
             #if DEBUG
             print("✅ FCM token sent to backend")
@@ -115,12 +145,6 @@ final class FCMManager: NSObject, ObservableObject {
             print("❌ Failed to send FCM token to backend: \(error)")
             #endif
         }
-        */
-        
-        #if DEBUG
-        print("📤 FCM token would be sent to backend: \(token)")
-        #endif
-        isRegistered = true
     }
     
     // MARK: - Handle Remote Notifications
@@ -131,13 +155,31 @@ final class FCMManager: NSObject, ObservableObject {
         #endif
         
         // Extract notification data
-        if let conversationId = userInfo["conversationId"] as? String {
-            // Navigate to conversation or update UI
-            NotificationCenter.default.post(
-                name: NSNotification.Name("OpenConversation"),
-                object: nil,
-                userInfo: ["conversationId": conversationId]
-            )
+        guard let type = userInfo["type"] as? String else {
+            return
+        }
+        
+        if type == "message" {
+            // Handle message notification
+            if let conversationId = userInfo["conversationId"] as? String,
+               let messageId = userInfo["messageId"] as? String {
+                // Post notification to refresh chat
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("NewMessageReceived"),
+                    object: nil,
+                    userInfo: [
+                        "conversationId": conversationId,
+                        "messageId": messageId
+                    ]
+                )
+                
+                // Also post for navigation
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("OpenConversation"),
+                    object: nil,
+                    userInfo: ["conversationId": conversationId]
+                )
+            }
         }
     }
 }
@@ -166,6 +208,21 @@ extension FCMManager: UNUserNotificationCenterDelegate {
     ) {
         handleRemoteNotification(response.notification.request.content.userInfo)
         completionHandler()
+    }
+}
+
+// MARK: - MessagingDelegate
+
+extension FCMManager: MessagingDelegate {
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        Task { @MainActor in
+            guard let token = fcmToken else { return }
+            self.fcmToken = token
+            await sendTokenToBackend(token: token)
+            #if DEBUG
+            print("📱 FCM registration token: \(token)")
+            #endif
+        }
     }
 }
 

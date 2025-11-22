@@ -20,11 +20,14 @@ final class ChatViewModel: ObservableObject {
     
     private let chatService = ChatService.shared
     private let socketManager = SocketManager.shared
+    private let fcmManager = FCMManager.shared
     weak var sessionManager: SessionManager?
     
     private var pollingTimer: Timer?
     private var currentConversationId: String?
-    private var useSockets: Bool = true // Toggle to use sockets or polling
+    private var useFCM: Bool = true // Use FCM for real-time updates
+    private var useSockets: Bool = false // Disable sockets in favor of FCM
+    private var pollingEnabled: Bool = false // Disable polling in favor of FCM
     
     func loadConversations() async {
         guard let session = sessionManager,
@@ -81,10 +84,17 @@ final class ChatViewModel: ObservableObject {
         
         isLoading = false
         
-        // Use sockets for real-time updates, fallback to polling if sockets not available
-        if useSockets && socketManager.isConnected {
+        // Set up real-time updates via FCM notifications
+        setupFCMNotificationHandlers()
+        
+        // Use FCM for real-time updates (primary method)
+        // Fallback to polling only if FCM is disabled
+        if useFCM {
+            // FCM will handle notifications via NotificationCenter
+            // No need to start polling or sockets
+        } else if useSockets && socketManager.isConnected {
             socketManager.joinConversation(conversationId)
-        } else {
+        } else if pollingEnabled {
             startPolling(conversationId: conversationId)
         }
     }
@@ -472,6 +482,34 @@ final class ChatViewModel: ObservableObject {
         #endif
     }
     
+    // MARK: - FCM Notification Handlers Setup
+    
+    private func setupFCMNotificationHandlers() {
+        // Listen for new message notifications from FCM
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("NewMessageReceived"),
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                
+                if let userInfo = notification.userInfo,
+                   let conversationId = userInfo["conversationId"] as? String,
+                   let messageId = userInfo["messageId"] as? String {
+                    
+                    // If this message is for the current conversation, refresh messages
+                    if conversationId == self.currentConversationId {
+                        await self.loadMessages(conversationId: conversationId)
+                    }
+                    
+                    // Always refresh conversations list to update last message and unread count
+                    await self.loadConversations()
+                }
+            }
+        }
+    }
+    
     // MARK: - Socket Handlers Setup
     
     private func setupSocketHandlers() {
@@ -537,6 +575,7 @@ final class ChatViewModel: ObservableObject {
     }
     
     deinit {
+        NotificationCenter.default.removeObserver(self, name: NSNotification.Name("NewMessageReceived"), object: nil)
         Task { @MainActor [weak self] in
             self?.stopPolling()
             if self?.useSockets == true {

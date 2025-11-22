@@ -73,6 +73,9 @@ final class SessionManager: ObservableObject {
                 self.isAuthenticated = true
                     self.requiresEmailVerification = false
                     self.pendingEmail = nil
+                    
+                    // Notify FCM that user is authenticated (for token refresh)
+                    NotificationCenter.default.post(name: NSNotification.Name("UserDidLogin"), object: nil)
                 }
             } catch {
                 // Try to refresh tokens first
@@ -186,6 +189,12 @@ final class SessionManager: ObservableObject {
                 self.requiresEmailVerification = (resp.verificationRequired == true) || (me.isVerified == false)
                 self.pendingEmail = self.requiresEmailVerification ? me.email : nil
                 self.pendingPassword = nil
+                
+                // Notify FCM that user logged in
+                if !self.requiresEmailVerification {
+                    NotificationCenter.default.post(name: NSNotification.Name("UserDidLogin"), object: nil)
+                }
+                
                 return true
             } else {
                 do {
@@ -266,6 +275,10 @@ final class SessionManager: ObservableObject {
                     setUserFromServer(me)
                     self.isAuthenticated = true
                     self.pendingPassword = nil
+                    
+                    // Notify FCM that user logged in
+                    NotificationCenter.default.post(name: NSNotification.Name("UserDidLogin"), object: nil)
+                    
                     return true
                 } catch {
                     self.lastError = "Verified. Please sign in to continue."
@@ -277,6 +290,10 @@ final class SessionManager: ObservableObject {
                 let me = try await auth.me(accessToken: token)
                 setUserFromServer(me)
                 self.isAuthenticated = true
+                
+                // Notify FCM that user logged in
+                NotificationCenter.default.post(name: NSNotification.Name("UserDidLogin"), object: nil)
+                
                 return true
             } else {
                 self.lastError = "Verified. Please sign in to continue."
@@ -360,6 +377,9 @@ final class SessionManager: ObservableObject {
             let me = try await auth.me(accessToken: resp.tokens.accessToken)
             setUserFromServer(me)
             self.isAuthenticated = true
+            
+            // Notify FCM that user logged in
+            NotificationCenter.default.post(name: NSNotification.Name("UserDidLogin"), object: nil)
         } catch {
             if let urlErr = error as? URLError, urlErr.code == .timedOut {
                 self.lastError = "The server is taking too long to respond. Please try again."
@@ -564,6 +584,9 @@ final class SessionManager: ObservableObject {
             let me = try await auth.me(accessToken: newTokens.accessToken)
             setUserFromServer(me)
             isAuthenticated = true
+            
+            // Notify FCM that user is authenticated (for token refresh)
+            NotificationCenter.default.post(name: NSNotification.Name("UserDidLogin"), object: nil)
         } catch {
             await logout()
         }
