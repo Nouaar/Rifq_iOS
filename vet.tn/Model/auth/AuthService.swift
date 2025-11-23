@@ -117,6 +117,20 @@ final class AuthService {
         )
     }
 
+    // MARK: - Apple sign-in — server expects { id_token } at POST /auth/apple
+    func apple(identityToken: String) async throws -> AuthResponse {
+        struct AppleBody: Encodable { let id_token: String }
+        return try await api.request(
+            "POST",
+            path: "/auth/apple",
+            body: AppleBody(id_token: identityToken),
+            responseType: AuthResponse.self,
+            timeout: 35,
+            retries: 2,
+            retryDelay: 0.9
+        )
+    }
+
     // MARK: - Refresh
     func refresh(refreshToken: String) async throws -> AuthTokens {
         struct RefreshBody: Encodable { let refreshToken: String }

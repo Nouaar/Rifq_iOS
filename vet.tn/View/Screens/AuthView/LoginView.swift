@@ -155,6 +155,11 @@ struct LoginView: View {
                                     .padding(.horizontal, 20)
                             }
 
+                            // MARK: - Apple Sign In button
+                            AppleSignInButton(source: .login)
+                                .padding(.horizontal, 20)
+                                .padding(.top, 8)
+
                             if let email = session.user?.email {
                                 Text("Signed in as \(email)")
                                     .font(.vetSmallFont())

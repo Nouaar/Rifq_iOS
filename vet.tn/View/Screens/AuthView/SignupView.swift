@@ -245,6 +245,11 @@ struct SignupView: View {
                         .padding(.horizontal, 24)
                 }
 
+                // MARK: - Apple Sign In button
+                AppleSignInButton(source: .signup)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+
                 Spacer(minLength: 40)
             }
         }

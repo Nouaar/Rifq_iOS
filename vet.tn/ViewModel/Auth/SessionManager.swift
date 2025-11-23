@@ -566,6 +566,135 @@ final class SessionManager: ObservableObject {
         await googleSignin(idToken: idToken, email: user?.email ?? "")
     }
 
+    // MARK: - Apple SIGNUP flow
+    func appleSignup(identityToken: String, email: String, name: String?) async {
+        lastError = nil
+        requiresEmailVerification = false
+        pendingEmail = nil
+        shouldNavigateToLogin = false
+        shouldNavigateToSignup = false
+
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        do {
+            var emailExists = false
+            do {
+                emailExists = try await auth.checkEmailExists(email: cleanEmail)
+            } catch {
+                #if DEBUG
+                print("⚠️ Email-exists check failed (endpoint might not exist): \(error)")
+                #endif
+            }
+            
+            if emailExists {
+                self.lastError = "Email already exists, you can login"
+                self.shouldNavigateToLogin = true
+                self.isAuthenticated = false
+                return
+            }
+
+            let resp = try await auth.apple(identityToken: identityToken)
+            self.tokens = resp.tokens
+            persist(tokens: resp.tokens)
+
+            let me = try await auth.me(accessToken: resp.tokens.accessToken)
+            setUserFromServer(me)
+            
+            if me.isVerified == false {
+                self.requiresEmailVerification = true
+                self.pendingEmail = cleanEmail
+                self.isAuthenticated = true
+                _ = try? await auth.resendVerification(email: cleanEmail)
+            } else {
+                self.lastError = "Email already exists, you can login"
+                self.shouldNavigateToLogin = true
+                self.isAuthenticated = false
+                self.tokens = nil
+                persist(tokens: nil)
+            }
+        } catch {
+            if let urlErr = error as? URLError, urlErr.code == .timedOut {
+                self.lastError = "The server is taking too long to respond. Please try again."
+            } else if case let APIClient.APIError.http(status, message) = error {
+                if status == 400 || status == 409 {
+                    self.lastError = "Email already exists, you can login"
+                    self.shouldNavigateToLogin = true
+                } else if status == 404 {
+                    self.lastError = friendly(message, fallback: "Could not verify email. Please try again.")
+                } else {
+                    self.lastError = friendly(message, fallback: "Apple signup failed. Please try again.")
+                }
+            } else {
+                self.lastError = error.localizedDescription
+            }
+            self.isAuthenticated = false
+        }
+    }
+
+    // MARK: - Apple SIGNIN flow
+    func appleSignin(identityToken: String, email: String) async {
+        lastError = nil
+        requiresEmailVerification = false
+        pendingEmail = nil
+        shouldNavigateToLogin = false
+        shouldNavigateToSignup = false
+
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        do {
+            var emailExists = false
+            do {
+                emailExists = try await auth.checkEmailExists(email: cleanEmail)
+            } catch {
+                #if DEBUG
+                print("⚠️ Email-exists check failed (endpoint might not exist): \(error)")
+                #endif
+            }
+            
+            let resp = try await auth.apple(identityToken: identityToken)
+            self.tokens = resp.tokens
+            persist(tokens: resp.tokens)
+
+            let me = try await auth.me(accessToken: resp.tokens.accessToken)
+            setUserFromServer(me)
+            
+            // User must exist in backend to sign in with Apple
+            if !emailExists {
+                self.lastError = "Account not found. Please sign up first."
+                self.shouldNavigateToSignup = true
+                self.isAuthenticated = false
+                self.tokens = nil
+                persist(tokens: nil)
+                return
+            }
+            
+            // Do NOT mark as fully authenticated yet; require in-app verification first
+            self.isAuthenticated = false
+            self.requiresEmailVerification = true
+            self.pendingEmail = cleanEmail
+            
+            // Request a verification code for Apple sign-in
+            _ = try? await auth.resendVerification(email: cleanEmail)
+        } catch {
+            if let urlErr = error as? URLError, urlErr.code == .timedOut {
+                self.lastError = "The server is taking too long to respond. Please try again."
+            } else if case let APIClient.APIError.http(status, message) = error {
+                if status == 404 {
+                    self.lastError = "Email is not verified, please signup"
+                    self.shouldNavigateToSignup = true
+                } else if status == 401 {
+                    self.lastError = friendly(message, fallback: "Email is not verified, please signup")
+                    self.shouldNavigateToSignup = true
+                } else {
+                    self.lastError = friendly(message, fallback: "Apple sign-in failed. Please try again.")
+                }
+            } else {
+                self.lastError = error.localizedDescription
+            }
+            self.isAuthenticated = false
+        }
+    }
+
     // MARK: - Logout
     func logout() async {
         lastError = nil
