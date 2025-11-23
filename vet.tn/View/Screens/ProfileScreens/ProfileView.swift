@@ -17,6 +17,7 @@ struct ProfileView: View {
     @State private var goMessages = false
     @State private var goJoinTeam = false
     @State private var showingEditProfile = false
+    @State private var showSubscriptionManagement = false
     
     private var displayName: String {
         session.user?.name?.isEmpty == false ? (session.user?.name ?? "User") : (session.user?.email ?? "User")
@@ -221,6 +222,20 @@ struct ProfileView: View {
                                     icon: "lock.fill",
                                     iconColor: .green
                                 )
+                                
+                                // Subscription Management (only for vets and sitters)
+                                if let role = session.user?.role?.lowercased(), (role == "vet" || role == "sitter") {
+                                    Button {
+                                        showSubscriptionManagement = true
+                                    } label: {
+                                        SettingsRow(
+                                            title: "Subscription",
+                                            icon: "creditcard.fill",
+                                            iconColor: .blue
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                             .padding(.horizontal, 16)
 
@@ -402,6 +417,10 @@ struct ProfileView: View {
                     await petViewModel.loadPets()
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowSubscriptionManagement"))) { _ in
+                // Show subscription management when requested
+                showSubscriptionManagement = true
+            }
             // Profile completion prompt: "Complete now" -> open Edit Profile, "Later" -> dismiss
             .alert("Complete your profile", isPresented: Binding(
                 get: { session.showProfileCompletionAlert },
@@ -422,9 +441,13 @@ struct ProfileView: View {
             .navigationDestination(isPresented: $goMessages) {
                 ConversationsListView()
             }
-            .navigationDestination(isPresented: $goJoinTeam) {
-                JoinTeamView()
-            }
+        .navigationDestination(isPresented: $goJoinTeam) {
+            JoinTeamView()
+        }
+        .sheet(isPresented: $showSubscriptionManagement) {
+            SubscriptionManagementView()
+                .environmentObject(session)
+        }
         }
     }
     

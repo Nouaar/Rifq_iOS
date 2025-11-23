@@ -12,8 +12,10 @@ struct JoinPetSitterView: View {
     @EnvironmentObject private var session: SessionManager
     
     @State private var goVerify = false
+    @State private var showPayment = false
     @State private var isSubmitting = false
     @State private var errorMessage: String?
+    @State private var paymentCompleted = false
 
     // MARK: - Form state
     @State private var fullName = ""
@@ -291,8 +293,14 @@ struct JoinPetSitterView: View {
 
                     // Submit
                     Button {
-                        Task {
-                            await submitSitterForm()
+                        // Check if user needs to pay first
+                        if session.user != nil && !paymentCompleted {
+                            // Show payment screen first
+                            showPayment = true
+                        } else {
+                            Task {
+                                await submitSitterForm()
+                            }
                         }
                     } label: {
                         if isSubmitting {
@@ -332,6 +340,17 @@ struct JoinPetSitterView: View {
                     phone = user.phone ?? ""
                 }
             }
+        }
+        .sheet(isPresented: $showPayment) {
+            PaymentView(role: "sitter") {
+                paymentCompleted = true
+                showPayment = false
+                // After payment, proceed with form submission
+                Task {
+                    await submitSitterForm()
+                }
+            }
+            .environmentObject(session)
         }
         .navigationDestination(isPresented: $goVerify) {
             EmailVerificationView(
@@ -392,6 +411,15 @@ struct JoinPetSitterView: View {
                 
                 guard let token = accessToken else {
                     errorMessage = "Please log in again to continue"
+                    isSubmitting = false
+                    return
+                }
+                
+                // Check if payment is required (for existing users converting to sitter)
+                // Payment should already be completed if paymentCompleted is true
+                if !paymentCompleted && currentUser.role?.lowercased() != "sitter" {
+                    // Payment required - this should have been handled by the button action
+                    errorMessage = "Please complete payment first"
                     isSubmitting = false
                     return
                 }

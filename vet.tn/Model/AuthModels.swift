@@ -27,6 +27,7 @@ struct AppUser: Codable {
     let role: String? // Role: 'owner', 'vet', 'sitter', 'admin'
     let latitude: Double?
     let longitude: Double?
+    let subscription: Subscription? // User's subscription info
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -52,6 +53,7 @@ struct AppUser: Codable {
         case role
         case latitude
         case longitude
+        case subscription
     }
 
     init(
@@ -68,7 +70,8 @@ struct AppUser: Codable {
         hasPets: Bool? = nil,
         role: String? = nil,
         latitude: Double? = nil,
-        longitude: Double? = nil
+        longitude: Double? = nil,
+        subscription: Subscription? = nil
     ) {
         self.id = id
         self.email = email
@@ -84,6 +87,7 @@ struct AppUser: Codable {
         self.role = role
         self.latitude = latitude
         self.longitude = longitude
+        self.subscription = subscription
     }
 
     init(from decoder: Decoder) throws {
@@ -159,6 +163,7 @@ struct AppUser: Codable {
         self.role = try? c.decode(String.self, forKey: .role)
         self.latitude = try? c.decode(Double.self, forKey: .latitude)
         self.longitude = try? c.decode(Double.self, forKey: .longitude)
+        self.subscription = try? c.decode(Subscription.self, forKey: .subscription)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -177,6 +182,7 @@ struct AppUser: Codable {
         try c.encodeIfPresent(role, forKey: .role)
         try c.encodeIfPresent(latitude, forKey: .latitude)
         try c.encodeIfPresent(longitude, forKey: .longitude)
+        try c.encodeIfPresent(subscription, forKey: .subscription)
     }
 
     func updating(
@@ -190,7 +196,8 @@ struct AppUser: Codable {
         hasPets: Bool? = nil,
         role: String? = nil,
         latitude: Double? = nil,
-        longitude: Double? = nil
+        longitude: Double? = nil,
+        subscription: Subscription? = nil
     ) -> AppUser {
         AppUser(
             id: id,
@@ -206,7 +213,8 @@ struct AppUser: Codable {
             hasPets: hasPets ?? self.hasPets,
             role: role ?? self.role,
             latitude: latitude ?? self.latitude,
-            longitude: longitude ?? self.longitude
+            longitude: longitude ?? self.longitude,
+            subscription: subscription ?? self.subscription
         )
     }
 }

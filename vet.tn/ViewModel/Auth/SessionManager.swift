@@ -154,6 +154,7 @@ final class SessionManager: ObservableObject {
             return s || c
         }()
         let role = server.role ?? cached?.role // Prefer server role, fallback to cached
+        let subscription = server.subscription ?? cached?.subscription // Prefer server subscription
 
         return AppUser(
             id: server.id,                 // always prefer server id/email
@@ -167,8 +168,29 @@ final class SessionManager: ObservableObject {
             pets: pets,
             hasPhoto: hasPhoto,
             hasPets: hasPets,
-            role: role
+            role: role,
+            latitude: server.latitude ?? cached?.latitude,
+            longitude: server.longitude ?? cached?.longitude,
+            subscription: subscription
         )
+    }
+    
+    // MARK: - Subscription Activation
+    /// Activates pending subscription after email verification
+    private func activatePendingSubscriptionIfNeeded(user: AppUser) async {
+        // If user has a subscription with pending status and is now verified,
+        // the backend should activate it automatically via webhook
+        // We just refresh user data to get updated subscription status
+        if let token = tokens?.accessToken {
+            do {
+                let updatedUser = try await auth.me(accessToken: token)
+                setUserFromServer(updatedUser)
+            } catch {
+                #if DEBUG
+                print("⚠️ Failed to refresh user after verification: \(error)")
+                #endif
+            }
+        }
     }
 
     // MARK: - Signup (email/password)
@@ -276,6 +298,9 @@ final class SessionManager: ObservableObject {
                     self.isAuthenticated = true
                     self.pendingPassword = nil
                     
+                    // Check if user has pending subscription to activate
+                    await activatePendingSubscriptionIfNeeded(user: me)
+                    
                     // Notify FCM that user logged in
                     NotificationCenter.default.post(name: NSNotification.Name("UserDidLogin"), object: nil)
                     
@@ -290,6 +315,9 @@ final class SessionManager: ObservableObject {
                 let me = try await auth.me(accessToken: token)
                 setUserFromServer(me)
                 self.isAuthenticated = true
+                
+                // Check if user has pending subscription to activate
+                await activatePendingSubscriptionIfNeeded(user: me)
                 
                 // Notify FCM that user logged in
                 NotificationCenter.default.post(name: NSNotification.Name("UserDidLogin"), object: nil)

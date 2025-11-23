@@ -8,6 +8,7 @@ import SwiftUI
 struct MainTabView: View {
     @EnvironmentObject private var session: SessionManager
     @StateObject private var themeStore = ThemeStore()
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
     @State private var tab: VetTab = .home
     @State private var hideTabBar = false
     @State private var showProfileAlert = false
@@ -84,6 +85,46 @@ struct MainTabView: View {
             }
         } message: {
             Text("Add your photo, phone number, and location to unlock all features.")
+        }
+        .alert("Subscription Expiring Soon", isPresented: $subscriptionManager.showExpirationAlert) {
+            Button("Renew Now") {
+                // Navigate to subscription management
+                tab = .profile
+                // Post notification to open subscription management
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    NotificationCenter.default.post(name: NSNotification.Name("ShowSubscriptionManagement"), object: nil)
+                }
+            }
+            Button("Later", role: .cancel) {
+                subscriptionManager.showExpirationAlert = false
+            }
+        } message: {
+            if let message = subscriptionManager.expirationMessage {
+                Text(message)
+            } else {
+                Text("Your subscription is about to expire. Renew now to continue your service.")
+            }
+        }
+        .onAppear {
+            // Check subscription when view appears
+            checkSubscriptionIfAuthenticated()
+        }
+        .onChange(of: session.isAuthenticated) { oldValue, newValue in
+            // Check subscription when user logs in
+            if newValue {
+                checkSubscriptionIfAuthenticated()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            // Check subscription when app comes to foreground
+            checkSubscriptionIfAuthenticated()
+        }
+    }
+    
+    private func checkSubscriptionIfAuthenticated() {
+        guard session.isAuthenticated, let accessToken = session.tokens?.accessToken else { return }
+        Task {
+            await subscriptionManager.checkSubscriptionStatus(accessToken: accessToken)
         }
     }
 }

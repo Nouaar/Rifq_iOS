@@ -32,8 +32,10 @@ struct JoinVetView: View {
 
     // Navigation & Loading
     @State private var goVerify = false
+    @State private var showPayment = false
     @State private var isSubmitting = false
     @State private var errorMessage: String?
+    @State private var paymentCompleted = false
 
     // Focus
     @FocusState private var focused: Field?
@@ -309,8 +311,14 @@ struct JoinVetView: View {
 
                     // Submit
                     Button {
-                        Task {
-                            await submitVetForm()
+                        // Check if user needs to pay first
+                        if session.user != nil && !paymentCompleted {
+                            // Show payment screen first
+                            showPayment = true
+                        } else {
+                            Task {
+                                await submitVetForm()
+                            }
                         }
                     } label: {
                         if isSubmitting {
@@ -353,6 +361,17 @@ struct JoinVetView: View {
                     phone = user.phone ?? ""
                 }
             }
+        }
+        .sheet(isPresented: $showPayment) {
+            PaymentView(role: "vet") {
+                paymentCompleted = true
+                showPayment = false
+                // After payment, proceed with form submission
+                Task {
+                    await submitVetForm()
+                }
+            }
+            .environmentObject(session)
         }
         .navigationDestination(isPresented: $goVerify) {
             EmailVerificationView(
