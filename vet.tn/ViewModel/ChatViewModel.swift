@@ -29,12 +29,28 @@ final class ChatViewModel: ObservableObject {
     private var useSockets: Bool = false // Disable sockets in favor of FCM
     private var pollingEnabled: Bool = false // Disable polling in favor of FCM
     
+    // Cooldown to prevent spamming API requests
+    private var lastConversationsRequestTime: Date?
+    private let conversationsCooldownInterval: TimeInterval = 60.0 // Minimum 60 seconds between requests
+    
     func loadConversations() async {
+        // Cooldown check - prevent spamming
+        if let lastRequest = lastConversationsRequestTime {
+            let timeSinceLastRequest = Date().timeIntervalSince(lastRequest)
+            if timeSinceLastRequest < conversationsCooldownInterval {
+                // Too soon, skip this request
+                return
+            }
+        }
+        
         guard let session = sessionManager,
               let accessToken = session.tokens?.accessToken else {
             error = "Not authenticated"
             return
         }
+        
+        // Update last request time
+        lastConversationsRequestTime = Date()
         
         isLoading = true
         error = nil

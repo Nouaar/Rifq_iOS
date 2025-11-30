@@ -17,6 +17,10 @@ final class NotificationViewModel: ObservableObject {
     private let notificationService = NotificationService.shared
     private var pollingTimer: Timer?
     
+    // Cooldown to prevent spamming API requests
+    private var lastUnreadCountRequestTime: Date?
+    private let unreadCountCooldownInterval: TimeInterval = 60.0 // Minimum 5 seconds between requests
+    
     func setSessionManager(_ session: SessionManager) {
         sessionManager = session
     }
@@ -45,10 +49,22 @@ final class NotificationViewModel: ObservableObject {
     }
     
     func updateUnreadCount() async {
+        // Cooldown check - prevent spamming
+        if let lastRequest = lastUnreadCountRequestTime {
+            let timeSinceLastRequest = Date().timeIntervalSince(lastRequest)
+            if timeSinceLastRequest < unreadCountCooldownInterval {
+                // Too soon, skip this request
+                return
+            }
+        }
+        
         guard let session = sessionManager,
               let accessToken = session.tokens?.accessToken else {
             return
         }
+        
+        // Update last request time
+        lastUnreadCountRequestTime = Date()
         
         do {
             unreadCount = try await notificationService.getUnreadCount(accessToken: accessToken)
