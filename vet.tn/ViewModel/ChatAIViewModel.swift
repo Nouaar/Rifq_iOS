@@ -12,7 +12,7 @@ final class ChatAIViewModel: ObservableObject {
 
     init() {
         messages = [
-            .init(role: .assistant, text: "👋 Hi! I'm your AI vet assistant. I can help answer questions about your pet's health, nutrition, behavior, and general care. How can I help you today?")
+            .init(role: .assistant, text: "👋 Hi! I'm your Vet AI assistant. I can help with diagnoses, recommendations, tips, and descriptions about your pet's health and care. I can analyze symptoms and suggest possible conditions. However, please remember this is AI assistance - always consult a licensed veterinarian for confirmation and proper treatment. How can I help you today?")
         ]
     }
 
@@ -180,10 +180,10 @@ final class ChatAIViewModel: ObservableObject {
             
             func getBaseURL() -> URL {
                 if let raw = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String,
-                   let url = URL(string: raw) {
+                  let url = URL(string: raw) {
                     return url
                 }
-                return URL(string: "https://rifq.onrender.com")!
+                return URL(string: "http://localhost:3000")!
             }
             
             let baseURL = getBaseURL()

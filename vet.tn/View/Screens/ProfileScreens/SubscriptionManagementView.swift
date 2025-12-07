@@ -16,6 +16,9 @@ struct SubscriptionManagementView: View {
     @State private var showReactivateConfirmation = false
     @State private var isProcessing = false
     @State private var showExpirationAlert = false
+    @State private var showEmailVerification = false
+    @State private var isResendingCode = false
+    @State private var resendSuccessMessage: String?
     
     var body: some View {
         ZStack {
@@ -66,10 +69,23 @@ struct SubscriptionManagementView: View {
                     }
                     
                     if let error = errorMessage {
-                        Text(error)
-                            .font(.system(size: 14))
-                            .foregroundColor(.red)
-                            .padding(.horizontal, 16)
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.red)
+                                Text("Error")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.red)
+                            }
+                            Text(error)
+                                .font(.system(size: 13))
+                                .foregroundColor(.red.opacity(0.9))
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(8)
+                        .padding(.horizontal, 16)
                     }
                 }
             }
@@ -98,29 +114,50 @@ struct SubscriptionManagementView: View {
             Text("Your subscription will remain active until the end of the current billing period. After that, your role will be downgraded to owner and you will no longer appear in discover lists.")
         }
         .alert("Reactivate Subscription", isPresented: $showReactivateConfirmation) {
-            Button("Cancel", role: .cancel) { }
-            Button("Confirm") {
+            Button("No", role: .cancel) { }
+            Button("Yes") {
                 Task {
                     await reactivateSubscription()
                 }
             }
         } message: {
-            Text("Your subscription will be reactivated and will continue to renew automatically.")
+            if let subscription = subscription,
+               let periodEnd = subscription.currentPeriodEnd {
+                let effectiveStatus = subscription.effectiveStatus
+                if effectiveStatus == .expiresSoon {
+                    Text("Your subscription will expire on \(formatDate(periodEnd)). Do you want to reactivate it? It will continue to renew automatically after the current period ends.")
+                } else {
+                    Text("Do you want to reactivate your subscription? It will continue to renew automatically.")
+                }
+            } else {
+                Text("Do you want to reactivate your subscription? It will continue to renew automatically.")
+            }
         }
-        .alert("Subscription Expiring Soon", isPresented: $showExpirationAlert) {
-            Button("Renew Now") {
-                // Navigate to payment/renewal
+        .alert("Subscription Reminder", isPresented: $showExpirationAlert) {
+            Button("View Details") {
+                // Navigate to subscription management
                 Task {
-                    await renewSubscription()
+                    await loadSubscription()
                 }
             }
             Button("Later", role: .cancel) { }
         } message: {
-            if let days = subscription?.daysUntilExpiration {
-                Text("Your subscription expires in \(days) day\(days == 1 ? "" : "s"). Renew now to continue your service.")
+            if let days = subscription?.daysUntilRenewal {
+                Text("Your subscription will renew in \(days) day\(days == 1 ? "" : "s").")
             } else {
-                Text("Your subscription is about to expire. Renew now to continue your service.")
+                Text("Your subscription will renew soon.")
             }
+        }
+        .sheet(isPresented: $showEmailVerification) {
+            SubscriptionVerificationView(subscription: subscription)
+                .onDisappear {
+                    // Refresh subscription after verification
+                    Task {
+                        await loadSubscription()
+                        // Also refresh user data to get updated role
+                        await session.refreshUserData()
+                    }
+                }
         }
     }
     
@@ -133,10 +170,11 @@ struct SubscriptionManagementView: View {
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Color.vetTitle)
                     Spacer()
-                    statusBadge(subscription.status)
+                    statusBadge(subscription.effectiveStatus)
                 }
                 
-                if subscription.status == .active || subscription.status == .expiresSoon {
+                let effectiveStatus = subscription.effectiveStatus
+                if effectiveStatus == .active || effectiveStatus == .expiresSoon || subscription.status == .pendingVerification || subscription.status == .pending || subscription.status == .gracePeriod {
                     if let endDate = subscription.currentPeriodEnd {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Current Period")
@@ -149,26 +187,41 @@ struct SubscriptionManagementView: View {
                                     .foregroundStyle(Color.vetTitle)
                             }
                             
-                            if subscription.cancelAtPeriodEnd == true {
+                            if effectiveStatus == .expiresSoon {
+                                if let days = subscription.daysUntilRenewal, days > 0 {
+                                    Text("Expires in \(days) day\(days == 1 ? "" : "s")")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(Color.orange)
+                                } else {
+                                    Text("Expires soon")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(Color.orange)
+                                }
+                            } else if subscription.cancelAtPeriodEnd == true {
                                 Text("Cancels at period end")
                                     .font(.system(size: 13))
                                     .foregroundStyle(Color.orange)
-                            } else if let days = subscription.daysUntilExpiration {
+                            } else if let days = subscription.daysUntilRenewal {
                                 if days > 0 {
-                                    if subscription.status == .expiresSoon {
-                                        Text("Expires in \(days) day\(days == 1 ? "" : "s")")
-                                            .font(.system(size: 13))
-                                            .foregroundStyle(Color.orange)
-                                    } else {
-                                        Text("Renews in \(days) day\(days == 1 ? "" : "s")")
-                                            .font(.system(size: 13))
-                                            .foregroundStyle(subscription.willExpireSoon ? Color.orange : Color.vetSubtitle)
-                                    }
-                                } else {
-                                    Text("Expired")
+                                    Text("Renews in \(days) day\(days == 1 ? "" : "s")")
                                         .font(.system(size: 13))
-                                        .foregroundStyle(Color.red)
+                                        .foregroundStyle(subscription.willRenewSoon ? Color.orange : Color.vetSubtitle)
+                                } else {
+                                    Text("Renewing today")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(Color.orange)
                                 }
+                            }
+                            
+                            // Show status-specific messages
+                            if subscription.status == .pendingVerification || subscription.status == .pending {
+                                Text("Waiting for email verification")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Color.blue)
+                            } else if subscription.status == .gracePeriod {
+                                Text("Payment failed - update your payment method")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Color.red)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -198,59 +251,9 @@ struct SubscriptionManagementView: View {
             .padding(.horizontal, 16)
             
             // Actions
-            if subscription.status == .active {
-                if subscription.cancelAtPeriodEnd == true {
-                    Button {
-                        showReactivateConfirmation = true
-                    } label: {
-                        Text("Reactivate Subscription")
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(maxWidth: .infinity, minHeight: 50)
-                            .background(Color.vetCanyon)
-                            .foregroundStyle(Color.white)
-                            .cornerRadius(12)
-                    }
-                    .padding(.horizontal, 16)
-                } else {
-                    Button {
-                        showCancelConfirmation = true
-                    } label: {
-                        Text("Cancel Subscription")
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(maxWidth: .infinity, minHeight: 50)
-                            .background(Color.red.opacity(0.1))
-                            .foregroundStyle(Color.red)
-                            .cornerRadius(12)
-                    }
-                    .padding(.horizontal, 16)
-                }
-                
-                // Don't show "Renew" button if subscription is active and not scheduled to cancel
-                // It will auto-renew automatically
-            } else if subscription.status == .expiresSoon {
-                // Show renew button for expires soon status
-                Button {
-                    Task {
-                        await renewSubscription()
-                    }
-                } label: {
-                    if isProcessing {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .frame(maxWidth: .infinity, minHeight: 50)
-                    } else {
-                        Text("Renew Subscription")
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(maxWidth: .infinity, minHeight: 50)
-                    }
-                }
-                .background(Color.orange)
-                .foregroundStyle(Color.white)
-                .cornerRadius(12)
-                .disabled(isProcessing)
-                .padding(.horizontal, 16)
-                
-                // Also show cancel button
+            let effectiveStatus = subscription.effectiveStatus
+            if effectiveStatus == .active {
+                // Active subscription - show cancel button
                 Button {
                     showCancelConfirmation = true
                 } label: {
@@ -262,7 +265,147 @@ struct SubscriptionManagementView: View {
                         .cornerRadius(12)
                 }
                 .padding(.horizontal, 16)
-            } else if subscription.status == .expired || subscription.status == .canceled {
+            } else if effectiveStatus == .expiresSoon {
+                // Subscription is scheduled to cancel but date hasn't expired - can reactivate
+                VStack(spacing: 12) {
+                    if let periodEnd = subscription.currentPeriodEnd {
+                        Text("Your subscription will expire on \(formatDate(periodEnd)). You can reactivate it to continue.")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.vetSubtitle)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                    } else {
+                        Text("Your subscription is scheduled to cancel. You can reactivate it to continue.")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.vetSubtitle)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                    }
+                    
+                    Button {
+                        showReactivateConfirmation = true
+                    } label: {
+                        Text("Reactivate Subscription")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                            .background(Color.vetCanyon)
+                            .foregroundStyle(Color.white)
+                            .cornerRadius(12)
+                    }
+                    .padding(.horizontal, 16)
+                }
+            } else if effectiveStatus == .canceled {
+                // Subscription is truly canceled (date has expired) - must create new subscription
+                VStack(spacing: 12) {
+                    if let periodEnd = subscription.currentPeriodEnd {
+                        Text("Your subscription expired on \(formatDate(periodEnd)). Create a new subscription to continue.")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.vetSubtitle)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                    } else {
+                        Text("Your subscription has been canceled. Create a new subscription to continue.")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.vetSubtitle)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                    }
+                    
+                    Button {
+                        Task {
+                            await renewSubscription()
+                        }
+                    } label: {
+                        if isProcessing {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .frame(maxWidth: .infinity, minHeight: 50)
+                        } else {
+                            Text("Create New Subscription")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(maxWidth: .infinity, minHeight: 50)
+                        }
+                    }
+                    .background(Color.vetCanyon)
+                    .foregroundStyle(Color.white)
+                    .cornerRadius(12)
+                    .disabled(isProcessing)
+                    .padding(.horizontal, 16)
+                }
+            } else if subscription.status == .pendingVerification || subscription.status == .pending {
+                // Show verification options for pending verification
+                VStack(spacing: 16) {
+                    VStack(spacing: 8) {
+                        Text("Please confirm your subscription with the verification code sent to your email")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.vetSubtitle)
+                            .multilineTextAlignment(.center)
+                        
+                        if let message = resendSuccessMessage {
+                            Text(message)
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color.green)
+                                .multilineTextAlignment(.center)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    
+                    // Resend Code & Verify Button - Opens verification interface
+                    Button {
+                        Task {
+                            // First resend the code, then open verification interface
+                            await resendVerificationCodeAndOpen()
+                        }
+                    } label: {
+                        if isResendingCode {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .frame(maxWidth: .infinity, minHeight: 50)
+                        } else {
+                            Text("Resend Confirmation Code")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(maxWidth: .infinity, minHeight: 50)
+                        }
+                    }
+                    .background(Color.vetCanyon)
+                    .foregroundStyle(Color.white)
+                    .cornerRadius(12)
+                    .disabled(isResendingCode)
+                    .padding(.horizontal, 16)
+                }
+                .padding(.horizontal, 16)
+            } else if subscription.status == .gracePeriod {
+                // Show update payment method button for grace period
+                Button {
+                    // Navigate to payment details update
+                    // This would typically open Stripe payment sheet or payment details view
+                    Task {
+                        // For now, we'll try to refresh subscription to see if payment succeeded
+                        await loadSubscription()
+                    }
+                } label: {
+                    if isProcessing {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                    } else {
+                        Text("Update Payment Method")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                    }
+                }
+                .background(Color.orange)
+                .foregroundStyle(Color.white)
+                .cornerRadius(12)
+                .disabled(isProcessing)
+                .padding(.horizontal, 16)
+                
+                Text("Your payment failed. Please update your payment method to avoid service interruption.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+            } else if subscription.status == .canceled {
                 Button {
                     Task {
                         await renewSubscription()
@@ -327,12 +470,14 @@ struct SubscriptionManagementView: View {
         switch status {
         case .active:
             return ("Active", .green)
+        case .pendingVerification:
+            return ("Pending Verification", .blue)
+        case .gracePeriod:
+            return ("Payment Failed", .orange)
         case .expiresSoon:
             return ("Expires Soon", .orange)
         case .canceled:
-            return ("Paused", .orange)
-        case .expired:
-            return ("Expired", .red)
+            return ("Canceled", .red)
         case .pending:
             return ("Pending", .blue)
         case .none:
@@ -372,8 +517,8 @@ struct SubscriptionManagementView: View {
             print("📱 Subscription state updated: status=\(sub.status.rawValue), willShowDetails=\(sub.status != .none && !sub.id.isEmpty)")
             #endif
             
-            // Check if subscription is expiring soon
-            if sub.willExpireSoon && sub.status == .active {
+            // Check if subscription will renew soon (reminder)
+            if sub.willRenewSoon && sub.status == .active {
                 showExpirationAlert = true
             }
         } catch {
@@ -399,13 +544,26 @@ struct SubscriptionManagementView: View {
             return
         }
         
+        // Preserve current role before canceling (in case backend changes it immediately)
+        let currentRole = session.user?.role
+        let currentSubscription = subscription
+        
         let subscriptionService = SubscriptionService.shared
         
         do {
             let response = try await subscriptionService.cancelSubscription(accessToken: accessToken)
             subscription = response.subscription
             
-            // Refresh user data to update role if needed
+            // If subscription date hasn't expired, preserve the professional role
+            // The mergedUser function will handle this, but we ensure subscription has the role
+            if let sub = subscription,
+               let periodEnd = sub.currentPeriodEnd,
+               periodEnd > Date() {
+                // Date hasn't expired - subscription should keep professional role
+                // The SessionManager's mergedUser will preserve it based on effectiveStatus
+            }
+            
+            // Refresh user data - mergedUser will preserve role if subscription is expiresSoon
             await session.refreshUserData()
         } catch {
             // If we get a 401, try refreshing token and retry once
@@ -435,32 +593,131 @@ struct SubscriptionManagementView: View {
         isProcessing = true
         errorMessage = nil
         
-        guard var accessToken = session.tokens?.accessToken else {
+        guard let accessToken = session.tokens?.accessToken else {
             errorMessage = "Please log in to reactivate subscription"
             isProcessing = false
             return
         }
         
-        let subscriptionService = SubscriptionService.shared
+        guard let currentSubscription = subscription else {
+            errorMessage = "Subscription not found"
+            isProcessing = false
+            return
+        }
         
+        let subscriptionService = SubscriptionService.shared
+        let effectiveStatus = currentSubscription.effectiveStatus
+        
+        // If the subscription is truly expired (date has passed), we can't reactivate
+        if effectiveStatus == .canceled {
+            errorMessage = "Your subscription has expired. Please create a new subscription."
+            isProcessing = false
+            return
+        }
+        
+        // If effective status is expiresSoon but backend status is CANCELED,
+        // the backend won't allow reactivation. We need to create a new subscription instead.
+        if effectiveStatus == .expiresSoon && currentSubscription.status == .canceled {
+            // Check if date hasn't expired - if so, create new subscription
+            if let periodEnd = currentSubscription.currentPeriodEnd, periodEnd > Date() {
+                // Date hasn't expired, but backend says CANCELED - create new subscription
+                do {
+                    guard let currentRole = session.user?.role?.lowercased(),
+                          (currentRole == "vet" || currentRole == "sitter") else {
+                        errorMessage = "Unable to determine subscription role. Please ensure you have a vet or sitter role."
+                        isProcessing = false
+                        return
+                    }
+                    
+                    let response = try await subscriptionService.createSubscription(role: currentRole, accessToken: accessToken)
+                    subscription = response.subscription
+                    await session.refreshUserData()
+                } catch {
+                    if let apiError = error as? APIClient.APIError {
+                        if case .http(let status, let message) = apiError {
+                            if status == 409 {
+                                errorMessage = "You already have an active subscription. Please refresh the page."
+                            } else {
+                                errorMessage = parseErrorMessage(message)
+                            }
+                        } else {
+                            errorMessage = error.localizedDescription
+                        }
+                    } else {
+                        errorMessage = error.localizedDescription
+                    }
+                }
+                isProcessing = false
+                return
+            }
+        }
+        
+        // Try to reactivate normally
         do {
             subscription = try await subscriptionService.reactivateSubscription(accessToken: accessToken)
             
             // Refresh user data
             await session.refreshUserData()
         } catch {
-            // If we get a 401, try refreshing token and retry once
-            if case APIClient.APIError.http(let status, _) = error, status == 401 {
-                await session.refreshTokensIfPossible()
-                if let refreshedToken = session.tokens?.accessToken {
-                    do {
-                        subscription = try await subscriptionService.reactivateSubscription(accessToken: refreshedToken)
-                        await session.refreshUserData()
-                    } catch {
-                        errorMessage = error.localizedDescription
+            // If reactivation fails with "Cannot reactivate expired or canceled subscription"
+            // and the date hasn't expired, try creating a new subscription
+            if case APIClient.APIError.http(let status, let message) = error {
+                if status == 400 && message.contains("Cannot reactivate expired or canceled subscription") {
+                    // Check if date hasn't expired
+                    if let periodEnd = currentSubscription.currentPeriodEnd, periodEnd > Date() {
+                        // Date hasn't expired, but backend won't reactivate - create new subscription
+                        do {
+                            guard let currentRole = session.user?.role?.lowercased(),
+                                  (currentRole == "vet" || currentRole == "sitter") else {
+                                errorMessage = "Unable to determine subscription role. Please ensure you have a vet or sitter role."
+                                isProcessing = false
+                                return
+                            }
+                            
+                            let response = try await subscriptionService.createSubscription(role: currentRole, accessToken: accessToken)
+                            subscription = response.subscription
+                            await session.refreshUserData()
+                        } catch {
+                            if let apiError = error as? APIClient.APIError {
+                                if case .http(let createStatus, let createMessage) = apiError {
+                                    if createStatus == 409 {
+                                        errorMessage = "You already have an active subscription. Please refresh the page."
+                                    } else {
+                                        errorMessage = parseErrorMessage(createMessage)
+                                    }
+                                } else {
+                                    errorMessage = error.localizedDescription
+                                }
+                            } else {
+                                errorMessage = error.localizedDescription
+                            }
+                        }
+                        isProcessing = false
+                        return
+                    } else {
+                        // Date has expired - show error
+                        errorMessage = "Your subscription has expired. Please create a new subscription."
+                    }
+                } else if status == 401 {
+                    await session.refreshTokensIfPossible()
+                    if let refreshedToken = session.tokens?.accessToken {
+                        do {
+                            subscription = try await subscriptionService.reactivateSubscription(accessToken: refreshedToken)
+                            await session.refreshUserData()
+                        } catch {
+                            // Parse error message for better user feedback
+                            if case APIClient.APIError.http(let retryStatus, let retryMessage) = error {
+                                errorMessage = parseErrorMessage(retryMessage)
+                            } else {
+                                errorMessage = error.localizedDescription
+                            }
+                        }
+                    } else {
+                        errorMessage = "Please log in again to reactivate subscription"
                     }
                 } else {
-                    errorMessage = "Please log in again to reactivate subscription"
+                    // Parse error message for better user feedback
+                    errorMessage = parseErrorMessage(message)
                 }
             } else {
                 errorMessage = error.localizedDescription
@@ -468,6 +725,18 @@ struct SubscriptionManagementView: View {
         }
         
         isProcessing = false
+    }
+    
+    /// Parses error message from API response to extract user-friendly message
+    private func parseErrorMessage(_ message: String) -> String {
+        // Try to parse JSON error message
+        if let data = message.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let errorMessage = json["message"] as? String {
+            return errorMessage
+        }
+        // If not JSON, return as is
+        return message
     }
     
     @MainActor
@@ -487,16 +756,22 @@ struct SubscriptionManagementView: View {
             // Check current subscription status
             let currentSub = try await subscriptionService.getSubscription(accessToken: accessToken)
             
-            // If subscription is scheduled to cancel, reactivate it
-            if (currentSub.status == .active || currentSub.status == .expiresSoon) && currentSub.cancelAtPeriodEnd == true {
-                subscription = try await subscriptionService.reactivateSubscription(accessToken: accessToken)
-            }
-            // If subscription is expires soon or active, extend/renew it
-            else if currentSub.status == .expiresSoon || currentSub.status == .active {
+            // Determine which endpoint to use based on subscription status
+            if currentSub.status == .canceled || currentSub.status == .none {
+                // For canceled or no subscription, create a new one
+                guard let currentRole = session.user?.role?.lowercased(),
+                      (currentRole == "vet" || currentRole == "sitter") else {
+                    errorMessage = "Unable to determine subscription role. Please ensure you have a vet or sitter role."
+                    isProcessing = false
+                    return
+                }
+                let response = try await subscriptionService.createSubscription(role: currentRole, accessToken: accessToken)
+                subscription = response.subscription
+            } else if currentSub.status == .active {
+                // For active subscriptions, use renew endpoint (extends by 1 month)
                 subscription = try await subscriptionService.renewSubscription(accessToken: accessToken)
-            }
-            // If subscription is expired or canceled, create a new one
-            else if currentSub.status == .expired || currentSub.status == .canceled {
+            } else {
+                // For other statuses (pending, gracePeriod, etc.), try to create new
                 guard let currentRole = session.user?.role?.lowercased(),
                       (currentRole == "vet" || currentRole == "sitter") else {
                     errorMessage = "Unable to determine subscription role"
@@ -510,10 +785,14 @@ struct SubscriptionManagementView: View {
             // Refresh user data
             await session.refreshUserData()
         } catch {
-            // Handle 409 conflict (subscription already exists)
+            // Parse error message for better user feedback
             if let apiError = error as? APIClient.APIError {
-                if case .http(let status, let message) = apiError, status == 409 {
-                    errorMessage = "You already have an active subscription. If it's scheduled to cancel, use the 'Reactivate' button instead."
+                if case .http(let status, let message) = apiError {
+                    if status == 409 {
+                        errorMessage = "You already have an active subscription. If it's scheduled to cancel, use the 'Reactivate' button instead."
+                    } else {
+                        errorMessage = parseErrorMessage(message)
+                    }
                 } else {
                     errorMessage = error.localizedDescription
                 }
@@ -523,6 +802,50 @@ struct SubscriptionManagementView: View {
         }
         
         isProcessing = false
+    }
+    
+    @MainActor
+    private func resendVerificationCodeAndOpen() async {
+        isResendingCode = true
+        resendSuccessMessage = nil
+        errorMessage = nil
+        
+        guard let accessToken = session.tokens?.accessToken else {
+            errorMessage = "Please log in to resend verification code"
+            isResendingCode = false
+            return
+        }
+        
+        do {
+            let subscriptionService = SubscriptionService.shared
+            let response = try await subscriptionService.resendSubscriptionVerification(accessToken: accessToken)
+            
+            // Code sent successfully, now open verification interface
+            isResendingCode = false
+            showEmailVerification = true
+            
+            if let userEmail = session.user?.email {
+                resendSuccessMessage = "Confirmation code sent to \(userEmail)"
+            } else {
+                resendSuccessMessage = response.message
+            }
+            
+            // Clear success message after 5 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                resendSuccessMessage = nil
+            }
+        } catch {
+            isResendingCode = false
+            if let apiError = error as? APIClient.APIError {
+                if case .http(let status, let message) = apiError {
+                    errorMessage = message.isEmpty ? "Failed to resend confirmation code" : message
+                } else {
+                    errorMessage = "Failed to resend confirmation code"
+                }
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 }
 

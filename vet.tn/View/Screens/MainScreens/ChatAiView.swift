@@ -105,12 +105,12 @@ struct ChatAIView: View {
 
         .if(useSystemNavBar) { view in
             view
-                .navigationTitle("AI Assistant")
+                .navigationTitle("Vet AI")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .principal) {
                         VStack(spacing: 2) {
-                            Text("AI Assistant")
+                            Text("Vet AI")
                                 .font(.system(size: 20, weight: .semibold))
                                 .foregroundColor(.vetTitle)
                             Text("Online")
@@ -387,7 +387,7 @@ struct ChatTopBar: View {
             Spacer()
             
             VStack(spacing: 2) {
-                Text("AI Assistant")
+                Text("Vet AI")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundColor(.vetTitle)
                 Text("Online")

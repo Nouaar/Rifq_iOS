@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>API_BASE_URL</key>
-	<string>https://rifq.onrender.com</string>
+	<string>http://localhost:3000</string>
 	<key>AUTH_BASE_URL</key>
-	<string>https://rifq.onrender.com</string>
+	<string>http://localhost:3000</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -21,7 +21,7 @@
 		<dict/>
 	</array>
 	<key>GEMINI_API_KEY</key>
-	<string>YOUR_GEMINI_API_KEY_HERE</string>
+	<string></string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

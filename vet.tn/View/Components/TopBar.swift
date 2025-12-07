@@ -7,6 +7,7 @@ struct TopBar: View {
     var onNotifications: (() -> Void)? = nil
     var onSettings: (() -> Void)? = nil   // (kept in case you still want a custom action)
     var onCommunity: (() -> Void)? = nil
+    var onDrawer: (() -> Void)? = nil
 
     @EnvironmentObject private var theme: ThemeStore
     @EnvironmentObject private var session: SessionManager
@@ -15,6 +16,7 @@ struct TopBar: View {
 
     @State private var showMessagesSheet = false
     @State private var showNotificationsSheet = false
+    @State private var showDrawer = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,6 +25,19 @@ struct TopBar: View {
                     Button { onBack?() } label: { headerBadge("chevron.left") }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Back")
+                } else {
+                    // Drawer button (hamburger menu) when not showing back
+                    Button {
+                        if let onDrawer {
+                            onDrawer()
+                        } else {
+                            showDrawer = true
+                        }
+                    } label: {
+                        headerBadge("line.3.horizontal")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Menu")
                 }
 
                 Text(title)
@@ -112,6 +127,13 @@ struct TopBar: View {
                 notificationManager.setSessionManager(session)
                 notificationManager.startPolling()
             }
+        }
+        .sheet(isPresented: $showDrawer) {
+            NavigationStack {
+                DrawerView()
+            }
+            .environmentObject(theme)
+            .environmentObject(session)
         }
     }
 

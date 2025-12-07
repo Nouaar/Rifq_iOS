@@ -27,11 +27,21 @@ final class MapViewModel: ObservableObject {
             let vets = try await vetsTask
             let sitters = try await sittersTask
             
-            // Filter and map vets with valid locations
+            // Filter and map vets with valid locations and active subscriptions
             vetLocations = vets.compactMap { vet in
                 guard let lat = vet.latitude,
                       let lon = vet.longitude,
                       lat != 0.0 || lon != 0.0 else {
+                    return nil
+                }
+                
+                // Only show vets with active subscriptions (Scenario 1 & 2)
+                if let subscription = vet.subscription {
+                    guard subscription.shouldAppearOnMap else {
+                        return nil
+                    }
+                } else {
+                    // No subscription means they shouldn't appear
                     return nil
                 }
                 
@@ -46,11 +56,21 @@ final class MapViewModel: ObservableObject {
                 )
             }
             
-            // Filter and map sitters with valid locations
+            // Filter and map sitters with valid locations and active subscriptions
             sitterLocations = sitters.compactMap { sitter in
                 guard let lat = sitter.latitude,
                       let lon = sitter.longitude,
                       lat != 0.0 || lon != 0.0 else {
+                    return nil
+                }
+                
+                // Only show sitters with active subscriptions (Scenario 1 & 2)
+                if let subscription = sitter.subscription {
+                    guard subscription.shouldAppearOnMap else {
+                        return nil
+                    }
+                } else {
+                    // No subscription means they shouldn't appear
                     return nil
                 }
                 

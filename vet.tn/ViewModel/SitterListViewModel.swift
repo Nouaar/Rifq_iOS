@@ -23,7 +23,12 @@ final class SitterListViewModel: ObservableObject {
         
         do {
             let appUsers = try await vetSitterService.getAllSitters()
-            sitters = appUsers.map { mapToSitter($0) }
+            // Filter to only show sitters with active subscriptions
+            let activeSitters = appUsers.filter { user in
+                guard let subscription = user.subscription else { return false }
+                return subscription.shouldAppearOnMap
+            }
+            sitters = activeSitters.map { mapToSitter($0) }
         } catch {
             self.error = error.localizedDescription
             #if DEBUG

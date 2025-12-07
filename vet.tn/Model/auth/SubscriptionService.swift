@@ -124,14 +124,52 @@ final class SubscriptionService {
         )
     }
     
+    // MARK: - Resend Subscription Verification Code
+    /// Resends verification code for subscription confirmation
+    func resendSubscriptionVerification(accessToken: String) async throws -> MessageResponse {
+        let headers = ["Authorization": "Bearer \(accessToken)"]
+        
+        return try await api.request(
+            "POST",
+            path: "/subscriptions/resend-verification",
+            headers: headers,
+            body: APIClient.Empty(),
+            responseType: MessageResponse.self,
+            timeout: 25,
+            retries: 1
+        )
+    }
+    
+    // MARK: - Verify Subscription
+    /// Verifies subscription with code to activate it
+    func verifySubscription(code: String, accessToken: String) async throws -> Subscription {
+        let headers = ["Authorization": "Bearer \(accessToken)"]
+        
+        struct VerifySubscriptionBody: Codable {
+            let code: String
+        }
+        
+        let response = try await api.request(
+            "POST",
+            path: "/subscriptions/verify-email",
+            headers: headers,
+            body: VerifySubscriptionBody(code: code),
+            responseType: VerifySubscriptionResponse.self,
+            timeout: 25,
+            retries: 1
+        )
+        
+        return response.subscription
+    }
+    
     // MARK: - Check Subscription Status
     /// Checks if subscription is active and valid
-    func checkSubscriptionStatus(_ subscription: Subscription) -> (isActive: Bool, daysUntilExpiration: Int?, willExpireSoon: Bool) {
+    func checkSubscriptionStatus(_ subscription: Subscription) -> (isActive: Bool, daysUntilRenewal: Int?, willRenewSoon: Bool) {
         let isActive = subscription.isActive
-        let daysUntilExpiration = subscription.daysUntilExpiration
-        let willExpireSoon = subscription.willExpireSoon
+        let daysUntilRenewal = subscription.daysUntilRenewal
+        let willRenewSoon = subscription.willRenewSoon
         
-        return (isActive, daysUntilExpiration, willExpireSoon)
+        return (isActive, daysUntilRenewal, willRenewSoon)
     }
 }
 

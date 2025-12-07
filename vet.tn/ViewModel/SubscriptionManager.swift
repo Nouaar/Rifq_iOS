@@ -49,9 +49,9 @@ final class SubscriptionManager: ObservableObject {
             let sub = try await subscriptionService.getSubscription(accessToken: token)
             subscription = sub
             
-            // Check if subscription is expiring soon
-            if sub.status == .active && sub.willExpireSoon {
-                if let days = sub.daysUntilExpiration {
+            // Check if subscription will renew soon (Scenario 4 - reminder)
+            if sub.status == .active && sub.willRenewSoon {
+                if let days = sub.daysUntilRenewal {
                     // Only show alert if we haven't shown it recently (cooldown)
                     let now = Date()
                     if let lastAlert = lastAlertShownDate {
@@ -61,16 +61,16 @@ final class SubscriptionManager: ObservableObject {
                         }
                     }
                     
-                    expirationMessage = "Your subscription expires in \(days) day\(days == 1 ? "" : "s"). Renew now to continue your service."
+                    expirationMessage = "Your subscription will renew in \(days) day\(days == 1 ? "" : "s")."
                     showExpirationAlert = true
                     lastAlertShownDate = now
                 }
             }
             
-            // Check if subscription has expired
-            if sub.isExpired && sub.status == .active {
-                // Show expired alert regardless of cooldown
-                expirationMessage = "Your subscription has expired. Your role has been downgraded to owner."
+            // Check if subscription is in grace period (Scenario 3 - payment failed)
+            if sub.status == .gracePeriod {
+                // Show grace period alert regardless of cooldown
+                expirationMessage = "Your payment failed. Please update your payment method to avoid service interruption."
                 showExpirationAlert = true
                 lastAlertShownDate = Date()
             }

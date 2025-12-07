@@ -86,8 +86,8 @@ struct MainTabView: View {
         } message: {
             Text("Add your photo, phone number, and location to unlock all features.")
         }
-        .alert("Subscription Expiring Soon", isPresented: $subscriptionManager.showExpirationAlert) {
-            Button("Renew Now") {
+        .alert("Subscription Reminder", isPresented: $subscriptionManager.showExpirationAlert) {
+            Button("View Details") {
                 // Navigate to subscription management
                 tab = .profile
                 // Post notification to open subscription management
@@ -102,7 +102,7 @@ struct MainTabView: View {
             if let message = subscriptionManager.expirationMessage {
                 Text(message)
             } else {
-                Text("Your subscription is about to expire. Renew now to continue your service.")
+                Text("Your subscription will renew soon.")
             }
         }
         .onAppear {

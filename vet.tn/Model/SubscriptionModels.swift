@@ -8,11 +8,12 @@ import Foundation
 // MARK: - Subscription Status
 enum SubscriptionStatus: String, Codable, Equatable {
     case active = "active"
-    case expiresSoon = "expires_soon"
-    case canceled = "canceled"
-    case expired = "expired"
-    case pending = "pending"
-    case none = "none"
+    case pendingVerification = "pending_verification" // After payment, before email verification
+    case canceled = "canceled" // Subscription canceled (at end of period)
+    case expiresSoon = "expires_soon" // Subscription will expire soon (scheduled to cancel)
+    case gracePeriod = "grace_period" // Payment failed, Stripe retrying
+    case pending = "pending" // Generic pending state (if needed)
+    case none = "none" // No subscription
 }
 
 // MARK: - Subscription Model
@@ -115,25 +116,89 @@ struct Subscription: Codable, Equatable {
         self.updatedAt = updatedAt
     }
     
+    /// Returns true if subscription is active and user should have professional role
+    /// Includes expiresSoon status - user keeps role until subscription is truly canceled (date expired)
     var isActive: Bool {
-        status == .active && !isExpired
+        let effective = effectiveStatus
+        return effective == .active || effective == .expiresSoon
     }
     
-    var isExpired: Bool {
-        guard let endDate = currentPeriodEnd else { return true }
-        return endDate < Date()
+    /// Returns true if user should appear on map/discover page
+    /// Only active subscriptions should appear (not expiresSoon)
+    var shouldAppearOnMap: Bool {
+        effectiveStatus == .active
     }
     
-    var daysUntilExpiration: Int? {
+    /// Returns true if subscription is in a state that allows professional role
+    /// (active, expiresSoon, or pending verification - user paid but hasn't verified email yet)
+    /// User keeps professional role until subscription is truly canceled (date expired)
+    var hasProfessionalAccess: Bool {
+        let effective = effectiveStatus
+        return effective == .active || effective == .expiresSoon || status == .pendingVerification
+    }
+    
+    /// Days until next renewal (for active subscriptions) or expiration
+    var daysUntilRenewal: Int? {
         guard let endDate = currentPeriodEnd else { return nil }
         let calendar = Calendar.current
         let components = calendar.dateComponents([.day], from: Date(), to: endDate)
         return components.day
     }
     
-    var willExpireSoon: Bool {
-        guard let days = daysUntilExpiration else { return false }
+    /// Returns true if subscription will renew soon (within 7 days)
+    /// This is not a status - just a reminder for active subscriptions
+    var willRenewSoon: Bool {
+        guard status == .active, let days = daysUntilRenewal else { return false }
         return days <= 7 && days > 0 // Within 7 days
+    }
+    
+    /// Returns true if subscription is scheduled to cancel at period end
+    var isScheduledToCancel: Bool {
+        cancelAtPeriodEnd == true && status == .active
+    }
+    
+    /// Returns the effective status based on cancelAtPeriodEnd and expiration date
+    /// If user canceled but date hasn't expired, status is "expires_soon"
+    /// Only after expiration should it be "canceled"
+    var effectiveStatus: SubscriptionStatus {
+        // If subscription is scheduled to cancel at period end
+        if cancelAtPeriodEnd == true {
+            // Check if the expiration date has passed
+            if let periodEnd = currentPeriodEnd {
+                if periodEnd > Date() {
+                    // Date hasn't expired yet - show as "expires_soon"
+                    return .expiresSoon
+                } else {
+                    // Date has expired - show as "canceled"
+                    return .canceled
+                }
+            } else {
+                // No expiration date, but scheduled to cancel - treat as expires_soon
+                return .expiresSoon
+            }
+        }
+        
+        // If backend says canceled but date hasn't expired, treat as expires_soon
+        // (This handles the case where backend sets status to CANCELED immediately)
+        if status == .canceled {
+            if let periodEnd = currentPeriodEnd {
+                if periodEnd > Date() {
+                    // Date hasn't expired yet - show as "expires_soon" (can reactivate)
+                    return .expiresSoon
+                } else {
+                    // Date has expired - show as "canceled" (must create new)
+                    return .canceled
+                }
+            }
+        }
+        
+        // Otherwise, use the actual status from backend
+        return status
+    }
+    
+    /// Returns true if subscription can be reactivated (expires_soon and date hasn't expired)
+    var canReactivate: Bool {
+        return effectiveStatus == .expiresSoon
     }
     
     // Equatable conformance
@@ -167,5 +232,18 @@ struct SubscriptionResponse: Codable {
 struct CancelSubscriptionResponse: Codable {
     let subscription: Subscription
     let message: String?
+}
+
+// MARK: - Verify Subscription Response
+struct VerifySubscriptionResponse: Codable {
+    let success: Bool?
+    let message: String?
+    let subscription: Subscription
+    
+    enum CodingKeys: String, CodingKey {
+        case success
+        case message
+        case subscription
+    }
 }
 

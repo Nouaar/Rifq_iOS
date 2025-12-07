@@ -25,6 +25,7 @@ struct HomeView: View {
     @State private var goPetSitter = false
     @State private var goAddPet    = false   // ⬅️ NEW
     @State private var goMessages = false
+    @State private var showDrawer = false
 
     // Sélection animée
     @State private var selectedActionID: UUID?  = nil
@@ -53,7 +54,8 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     TopBar(
                         title: "Home",
-                        onCommunity: { goMessages = true }
+                        onCommunity: { goMessages = true },
+                        onDrawer: { showDrawer = true }
                     )
 
                     dailyTipCarousel
@@ -94,6 +96,12 @@ struct HomeView: View {
         .navigationDestination(isPresented: $goMessages) {
             ConversationsListView()
                 .navigationBarBackButtonHidden(false)
+        }
+        .sheet(isPresented: $showDrawer) {
+            NavigationStack {
+                DrawerView()
+            }
+            .environmentObject(session)
         }
         .onAppear {
             petViewModel.sessionManager = session
@@ -586,7 +594,7 @@ struct HomeView: View {
 
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 switch action.title {
-                case "Chat AI":
+                case "Vet AI":
                     goChatAI = true
                 case "Find Vet":
                     goFindVet = true
@@ -987,7 +995,7 @@ struct Reminder: Identifiable {
 // petsMock removed - now using real pets from PetViewModel
 
 let actionsMock: [QuickAction] = [
-    .init(title: "Chat AI",    emoji: "🤖"),
+    .init(title: "Vet AI",    emoji: "🤖"),
     .init(title: "Find Vet",   emoji: "🩺"),
     .init(title: "Calendar",   emoji: "📅"),
     .init(title: "Pet Sitter", emoji: "🧑‍⚕️")

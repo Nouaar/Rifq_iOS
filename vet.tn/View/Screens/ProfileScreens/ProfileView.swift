@@ -442,7 +442,7 @@ struct ProfileView: View {
                 ConversationsListView()
             }
         .navigationDestination(isPresented: $goJoinTeam) {
-            JoinTeamView()
+            BecomeProfessionalView()
         }
         .sheet(isPresented: $showSubscriptionManagement) {
             SubscriptionManagementView()

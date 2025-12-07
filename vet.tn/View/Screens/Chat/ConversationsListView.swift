@@ -17,24 +17,70 @@ struct ConversationsListView: View {
         ZStack {
             Color.vetBackground.ignoresSafeArea()
             
+            // Loading state
             if viewModel.isLoading && viewModel.conversations.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if viewModel.conversations.isEmpty {
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .tint(.vetCanyon)
+                    Text("Loading conversations...")
+                        .font(.system(size: 14))
+                        .foregroundColor(.vetSubtitle)
+                }
+            }
+            // Error state - matches Android ConversationsListScreen
+            else if let error = viewModel.error, viewModel.conversations.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 48))
+                        .foregroundColor(.red.opacity(0.6))
+                    
+                    Text("Error loading conversations")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.vetTitle)
+                    
+                    Text(error)
+                        .font(.system(size: 14))
+                        .foregroundColor(.vetSubtitle)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    
+                    Button {
+                        Task {
+                            await viewModel.loadConversations()
+                        }
+                    } label: {
+                        Text("Retry")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 12)
+                            .background(Color.vetCanyon)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .padding(.top, 8)
+                }
+                .padding()
+            }
+            // Empty state - matches Android ConversationsListScreen
+            else if viewModel.conversations.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "message.fill")
                         .font(.system(size: 48))
                         .foregroundColor(.vetSubtitle.opacity(0.5))
+                    
                     Text("No conversations yet")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.vetSubtitle)
+                    
                     Text("Start chatting with vets or pet sitters")
                         .font(.system(size: 14))
                         .foregroundColor(.vetSubtitle.opacity(0.7))
                         .multilineTextAlignment(.center)
                 }
                 .padding()
-            } else {
+            }
+            // Conversations list - matches Android ConversationsListScreen
+            else {
                 List {
                     ForEach(viewModel.conversations) { conversation in
                         NavigationLink {
@@ -173,10 +219,10 @@ struct ConversationRow: View {
                     Spacer()
                     
                     if let unread = conversation.unreadCount, unread > 0 {
-                        Text("\(unread)")
+                        Text("\(unread > 99 ? "99+" : "\(unread)")")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundColor(.white)
-                            .padding(.horizontal, 8)
+                            .padding(.horizontal, unread > 9 ? 6 : 8)
                             .padding(.vertical, 4)
                             .background(Color.vetCanyon)
                             .clipShape(Capsule())

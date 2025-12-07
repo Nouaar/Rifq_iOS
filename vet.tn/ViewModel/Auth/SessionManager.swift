@@ -153,8 +153,38 @@ final class SessionManager: ObservableObject {
             let c = !(cached?.pets?.isEmpty ?? true)
             return s || c
         }()
-        let role = server.role ?? cached?.role // Prefer server role, fallback to cached
+        var role = server.role ?? cached?.role // Prefer server role, fallback to cached
         let subscription = server.subscription ?? cached?.subscription // Prefer server subscription
+        
+        // If subscription is "expires soon" (date hasn't expired), preserve professional role
+        // Backend might set role to "owner" immediately on cancel, but user should keep
+        // professional role until expiration date passes
+        if let sub = subscription {
+            let effectiveStatus = sub.effectiveStatus
+            
+            // Check if subscription should maintain professional role
+            // (active, expiresSoon, or pendingVerification)
+            if effectiveStatus == .expiresSoon || effectiveStatus == .active {
+                // Subscription is still valid (hasn't expired) - preserve professional role
+                // Use subscription role (vet/sitter) or fallback to cached professional role
+                if !sub.role.isEmpty {
+                    let roleLower = sub.role.lowercased()
+                    if roleLower == "vet" || roleLower == "sitter" {
+                        role = sub.role
+                    }
+                } else if let cachedRole = cached?.role {
+                    let cachedRoleLower = cachedRole.lowercased()
+                    if cachedRoleLower == "vet" || cachedRoleLower == "sitter" {
+                        // Fallback to cached role if subscription role is missing
+                        role = cachedRole
+                    }
+                }
+            } else if effectiveStatus == .canceled {
+                // Subscription has expired - use server role (should be "owner")
+                // Don't override with subscription role
+            }
+            // For other statuses (pendingVerification, etc.), use server role
+        }
 
         return AppUser(
             id: server.id,                 // always prefer server id/email
@@ -178,17 +208,21 @@ final class SessionManager: ObservableObject {
     // MARK: - Subscription Activation
     /// Activates pending subscription after email verification
     private func activatePendingSubscriptionIfNeeded(user: AppUser) async {
-        // If user has a subscription with pending status and is now verified,
-        // the backend should activate it automatically via webhook
+        // If user has a subscription with pending_verification status and is now verified,
+        // the backend should activate it automatically (Scenario 1 - step 6)
         // We just refresh user data to get updated subscription status
-        if let token = tokens?.accessToken {
-            do {
-                let updatedUser = try await auth.me(accessToken: token)
-                setUserFromServer(updatedUser)
-            } catch {
-                #if DEBUG
-                print("⚠️ Failed to refresh user after verification: \(error)")
-                #endif
+        if let subscription = user.subscription,
+           subscription.status == .pendingVerification,
+           user.isVerified == true {
+            if let token = tokens?.accessToken {
+                do {
+                    let updatedUser = try await auth.me(accessToken: token)
+                    setUserFromServer(updatedUser)
+                } catch {
+                    #if DEBUG
+                    print("⚠️ Failed to refresh user after verification: \(error)")
+                    #endif
+                }
             }
         }
     }
@@ -736,8 +770,7 @@ final class SessionManager: ObservableObject {
         guard let refresh = tokens?.refreshToken else { return }
         do {
             let newTokens = try await auth.refresh(refreshToken: refresh)
-            tokens = newTokens
-            persist(tokens: newTokens)
+            updateTokens(newTokens)
             let me = try await auth.me(accessToken: newTokens.accessToken)
             setUserFromServer(me)
             isAuthenticated = true
@@ -747,6 +780,13 @@ final class SessionManager: ObservableObject {
         } catch {
             await logout()
         }
+    }
+    
+    // MARK: - Update Tokens (for automatic refresh from APIClient)
+    /// Updates tokens and persists them (used by APIClient for automatic token refresh)
+    func updateTokens(_ newTokens: AuthTokens) {
+        tokens = newTokens
+        persist(tokens: newTokens)
     }
 
     func authorizedHeaders() -> [String: String] {

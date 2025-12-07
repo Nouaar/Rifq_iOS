@@ -90,6 +90,10 @@ struct vet_tnApp: App {
         // Set session manager for FCM Manager
         FCMManager.shared.setSessionManager(session)
         
+        // Set session manager for APIClient (for automatic token refresh)
+        APIClient.auth.setSessionManager(session)
+        APIClient.shared.setSessionManager(session)
+        
         // Register for push notifications
         FCMManager.shared.registerForPushNotifications()
 
