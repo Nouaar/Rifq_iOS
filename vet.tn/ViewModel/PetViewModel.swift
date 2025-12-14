@@ -9,22 +9,81 @@ import Foundation
 import SwiftUI
 import Combine
 
+/// ViewModel for managing pet-related operations and state.
+///
+/// The `PetViewModel` handles loading, creating, updating, and deleting pets.
+/// It communicates with the backend API through `PetService` and manages
+/// the local state of pets for the current user.
+///
+/// ## Usage
+///
+/// ```swift
+/// // Using dependency injection
+/// let viewModel = DIContainer.shared.container.resolve(PetViewModel.self)!
+///
+/// // Or with manual initialization
+/// let viewModel = PetViewModel(petService: PetService.shared, sessionManager: session)
+/// await viewModel.loadPets()
+/// ```
+///
+/// ## Topics
+///
+/// ### Pet Management
+/// - ``loadPets()``
+/// - ``createPet(_:)``
+/// - ``updatePet(petId:request:)``
+/// - ``deletePet(petId:)``
 @MainActor
 final class PetViewModel: ObservableObject {
     @Published var pets: [Pet] = []
     @Published var isLoading: Bool = false
     @Published var error: String?
     
-    private let petService = PetService.shared
+    private let petService: PetServiceProtocol
     weak var sessionManager: SessionManager?
     private var loadTask: Task<Void, Never>?
     
-    init(sessionManager: SessionManager? = nil) {
+    /// Initializes a new PetViewModel with injected dependencies.
+    ///
+    /// - Parameters:
+    ///   - petService: The service for pet-related API operations
+    ///   - sessionManager: The session manager for authentication state
+    ///
+    /// - Note: For dependency injection, use `DIContainer.shared.container.resolve(PetViewModel.self)`
+    init(petService: PetServiceProtocol, sessionManager: SessionManager? = nil) {
+        self.petService = petService
         self.sessionManager = sessionManager
+    }
+    
+    /// Convenience initializer for backward compatibility.
+    ///
+    /// - Parameter sessionManager: The session manager for authentication state
+    ///
+    /// - Note: This initializer uses `PetService.shared` internally.
+    ///   Prefer using the full initializer with dependency injection for better testability.
+    convenience init(sessionManager: SessionManager? = nil) {
+        self.init(petService: PetService.shared, sessionManager: sessionManager)
     }
     
     // MARK: - Load Pets
     
+    /// Loads all pets for the current authenticated user.
+    ///
+    /// This method fetches pets from the backend API and updates the `pets` array.
+    /// It handles loading states, errors, and cancellation gracefully.
+    ///
+    /// - Note: Requires an authenticated session. If not authenticated, sets `error` to "Not authenticated".
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// await viewModel.loadPets()
+    /// if let error = viewModel.error {
+    ///     print("Error loading pets: \(error)")
+    /// } else {
+    ///     print("Loaded \(viewModel.pets.count) pets")
+    /// }
+    /// ```
     func loadPets() async {
         // Cancel any existing load task to prevent multiple simultaneous calls
         loadTask?.cancel()
@@ -101,6 +160,15 @@ final class PetViewModel: ObservableObject {
     
     // MARK: - Create Pet
     
+    /// Creates a new pet for the current user.
+    ///
+    /// - Parameter request: The pet creation request containing pet details
+    /// - Returns: `true` if the pet was created successfully, `false` otherwise
+    ///
+    /// After successful creation, this method automatically reloads all pets
+    /// and updates the `hasPets` flag in the user's profile.
+    ///
+    /// - Note: Requires an authenticated session.
     func createPet(_ request: CreatePetRequest) async -> Bool {
         guard let session = sessionManager,
               let userId = session.user?.id,

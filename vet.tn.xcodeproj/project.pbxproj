@@ -18,7 +18,18 @@
 		04E2F7592ED204BE00F28CD3 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 04E2F5DC2ED2041700F28CD3 /* FirebaseCore */; };
 		04E2F75A2ED204BE00F28CD3 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 04E2F5DD2ED2041700F28CD3 /* FirebaseMessaging */; };
 		04E2F81B2ED2076700F28CD3 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 04E2F81A2ED2076700F28CD3 /* GoogleService-Info.plist */; };
+		C7FE7D1A2EEF4DC5004E9774 /* Swinject in Frameworks */ = {isa = PBXBuildFile; productRef = C7FE7D192EEF4DC5004E9774 /* Swinject */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		C7FE7D232EEF4E15004E9774 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 04AD1A242EB93A00006229B4 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 04AD1A2B2EB93A00006229B4;
+			remoteInfo = vet.tn;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		04AD1A2C2EB93A00006229B4 /* vet.tn.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = vet.tn.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -26,12 +37,18 @@
 		04B4DCF02EBE6E5300D51AB7 /* ar */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ar; path = ar.lproj/Localizable..strings; sourceTree = "<group>"; };
 		04B4DCF12EBE6E6100D51AB7 /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/Localizable..strings; sourceTree = "<group>"; };
 		04E2F81A2ED2076700F28CD3 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		C7FE7D1F2EEF4E15004E9774 /* vet.tnTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = vet.tnTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		04AD1A2E2EB93A00006229B4 /* vet.tn */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = vet.tn;
+			sourceTree = "<group>";
+		};
+		C7FE7D202EEF4E15004E9774 /* vet.tnTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = vet.tnTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -42,6 +59,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				04E2F75A2ED204BE00F28CD3 /* FirebaseMessaging in Frameworks */,
+				C7FE7D1A2EEF4DC5004E9774 /* Swinject in Frameworks */,
 				04E2F7592ED204BE00F28CD3 /* FirebaseCore in Frameworks */,
 				04E2F5D62ED2041600F28CD3 /* FirebaseAILogic in Frameworks */,
 				04E2F5DA2ED2041600F28CD3 /* FirebaseAnalyticsCore in Frameworks */,
@@ -50,6 +68,13 @@
 				04B4DCE52EBE3D8000D51AB7 /* GoogleSignInSwift in Frameworks */,
 				04E2F5D82ED2041600F28CD3 /* FirebaseAnalytics in Frameworks */,
 				04E2F5D42ED2041600F28CD3 /* FirebaseAI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C7FE7D1C2EEF4E15004E9774 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -62,6 +87,7 @@
 				04E2F81A2ED2076700F28CD3 /* GoogleService-Info.plist */,
 				04B4DCED2EBE6DCF00D51AB7 /* Localizable..strings */,
 				04AD1A2E2EB93A00006229B4 /* vet.tn */,
+				C7FE7D202EEF4E15004E9774 /* vet.tnTests */,
 				04AD1A2D2EB93A00006229B4 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -70,6 +96,7 @@
 			isa = PBXGroup;
 			children = (
 				04AD1A2C2EB93A00006229B4 /* vet.tn.app */,
+				C7FE7D1F2EEF4E15004E9774 /* vet.tnTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -81,6 +108,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 04AD1A3C2EB93A01006229B4 /* Build configuration list for PBXNativeTarget "vet.tn" */;
 			buildPhases = (
+				C7FE7D2E2EEF4E65004E9774 /* SwiftLint */,
 				04AD1A282EB93A00006229B4 /* Sources */,
 				04AD1A292EB93A00006229B4 /* Frameworks */,
 				04AD1A2A2EB93A00006229B4 /* Resources */,
@@ -103,10 +131,34 @@
 				04E2F5DD2ED2041700F28CD3 /* FirebaseMessaging */,
 				04E2F5D92ED2041600F28CD3 /* FirebaseAnalyticsCore */,
 				04E2F5DB2ED2041600F28CD3 /* FirebaseAnalyticsIdentitySupport */,
+				C7FE7D192EEF4DC5004E9774 /* Swinject */,
 			);
 			productName = vet.tn;
 			productReference = 04AD1A2C2EB93A00006229B4 /* vet.tn.app */;
 			productType = "com.apple.product-type.application";
+		};
+		C7FE7D1E2EEF4E15004E9774 /* vet.tnTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C7FE7D252EEF4E15004E9774 /* Build configuration list for PBXNativeTarget "vet.tnTests" */;
+			buildPhases = (
+				C7FE7D1B2EEF4E15004E9774 /* Sources */,
+				C7FE7D1C2EEF4E15004E9774 /* Frameworks */,
+				C7FE7D1D2EEF4E15004E9774 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C7FE7D242EEF4E15004E9774 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				C7FE7D202EEF4E15004E9774 /* vet.tnTests */,
+			);
+			name = vet.tnTests;
+			packageProductDependencies = (
+			);
+			productName = vet.tnTests;
+			productReference = C7FE7D1F2EEF4E15004E9774 /* vet.tnTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -115,11 +167,15 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2600;
+				LastSwiftUpdateCheck = 2610;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					04AD1A2B2EB93A00006229B4 = {
 						CreatedOnToolsVersion = 26.0.1;
+					};
+					C7FE7D1E2EEF4E15004E9774 = {
+						CreatedOnToolsVersion = 26.1;
+						TestTargetID = 04AD1A2B2EB93A00006229B4;
 					};
 				};
 			};
@@ -137,6 +193,7 @@
 			packageReferences = (
 				04B4DCE12EBE3D8000D51AB7 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				04E2F5D12ED1FC6D00F28CD3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				C7FE7D182EEF4DC5004E9774 /* XCRemoteSwiftPackageReference "Swinject" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 04AD1A2D2EB93A00006229B4 /* Products */;
@@ -144,6 +201,7 @@
 			projectRoot = "";
 			targets = (
 				04AD1A2B2EB93A00006229B4 /* vet.tn */,
+				C7FE7D1E2EEF4E15004E9774 /* vet.tnTests */,
 			);
 		};
 /* End PBXProject section */
@@ -158,7 +216,35 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C7FE7D1D2EEF4E15004E9774 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		C7FE7D2E2EEF4E65004E9774 /* SwiftLint */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = SwiftLint;
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "   if which swiftlint >/dev/null 2>&1; then\n       swiftlint\n   else\n       echo \"warning: SwiftLint not installed\"\n   fi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		04AD1A282EB93A00006229B4 /* Sources */ = {
@@ -168,7 +254,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C7FE7D1B2EEF4E15004E9774 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C7FE7D242EEF4E15004E9774 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 04AD1A2B2EB93A00006229B4 /* vet.tn */;
+			targetProxy = C7FE7D232EEF4E15004E9774 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		04B4DCED2EBE6DCF00D51AB7 /* Localizable..strings */ = {
@@ -377,6 +478,48 @@
 			};
 			name = Release;
 		};
+		C7FE7D262EEF4E15004E9774 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "tn.rifq.vet-tnTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/vet.tn.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/vet.tn";
+			};
+			name = Debug;
+		};
+		C7FE7D272EEF4E15004E9774 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "tn.rifq.vet-tnTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/vet.tn.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/vet.tn";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -398,6 +541,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		C7FE7D252EEF4E15004E9774 /* Build configuration list for PBXNativeTarget "vet.tnTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C7FE7D262EEF4E15004E9774 /* Debug */,
+				C7FE7D272EEF4E15004E9774 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -415,6 +567,14 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 12.6.0;
+			};
+		};
+		C7FE7D182EEF4DC5004E9774 /* XCRemoteSwiftPackageReference "Swinject" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Swinject/Swinject.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.10.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -464,6 +624,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 04E2F5D12ED1FC6D00F28CD3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseMessaging;
+		};
+		C7FE7D192EEF4DC5004E9774 /* Swinject */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C7FE7D182EEF4DC5004E9774 /* XCRemoteSwiftPackageReference "Swinject" */;
+			productName = Swinject;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

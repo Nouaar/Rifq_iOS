@@ -19,8 +19,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        // Configure Firebase
-        FirebaseApp.configure()
+        // Configure Firebase FIRST, before any Firebase calls
+        // This must happen early to prevent "Firebase app not configured" warnings
+        if FirebaseApp.app() == nil {
+            FirebaseApp.configure()
+        }
         
         // Set FCM delegate
         Messaging.messaging().delegate = FCMManager.shared
@@ -86,16 +89,6 @@ struct vet_tnApp: App {
         GIDSignIn.sharedInstance.configuration = GIDConfiguration(
             clientID: "68176423413-uvu0od4sog6hiqnegaer9s44bo4qcgsa.apps.googleusercontent.com"
         )
-        
-        // Set session manager for FCM Manager
-        FCMManager.shared.setSessionManager(session)
-        
-        // Set session manager for APIClient (for automatic token refresh)
-        APIClient.auth.setSessionManager(session)
-        APIClient.shared.setSessionManager(session)
-        
-        // Register for push notifications
-        FCMManager.shared.registerForPushNotifications()
 
         #if DEBUG
         // Print the base URLs we'll actually use (from Info.plist)
@@ -108,10 +101,44 @@ struct vet_tnApp: App {
 
     var body: some Scene {
         WindowGroup {
-            SplashView()
-                .environmentObject(theme)
-                .environmentObject(session)
-                .preferredColorScheme(theme.preferred)
+            AppSetupView(session: session) {
+                SplashView()
+                    .environmentObject(theme)
+                    .environmentObject(session)
+                    .preferredColorScheme(theme.preferred)
+            }
         }
+    }
+}
+
+// MARK: - Setup View
+/// Helper view to setup session manager after StateObject is available
+private struct AppSetupView<Content: View>: View {
+    let session: SessionManager
+    let content: Content
+    
+    init(session: SessionManager, @ViewBuilder content: () -> Content) {
+        self.session = session
+        self.content = content()
+    }
+    
+    var body: some View {
+        content
+            .task {
+                // Setup session manager after view is created (StateObject is now available)
+                setupSessionManager()
+            }
+    }
+    
+    private func setupSessionManager() {
+        // Set session manager for FCM Manager
+        FCMManager.shared.setSessionManager(session)
+        
+        // Set session manager for APIClient (for automatic token refresh)
+        APIClient.auth.setSessionManager(session)
+        APIClient.shared.setSessionManager(session)
+        
+        // Register for push notifications
+        FCMManager.shared.registerForPushNotifications()
     }
 }

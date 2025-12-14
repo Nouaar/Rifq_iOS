@@ -2,6 +2,42 @@ import Foundation
 import Combine
 import UIKit
 
+/// Manages user authentication state and session persistence.
+///
+/// The `SessionManager` is the central component for handling user authentication,
+/// token management, and session state throughout the application lifecycle.
+///
+/// ## Usage
+///
+/// ```swift
+/// @EnvironmentObject private var session: SessionManager
+///
+/// if session.isAuthenticated {
+///     // User is logged in
+/// } else {
+///     // Show login screen
+/// }
+/// ```
+///
+/// ## Features
+///
+/// - Automatic token refresh
+/// - Secure token storage in Keychain
+/// - User data caching
+/// - Email verification flow management
+/// - Profile completion tracking
+///
+/// ## Topics
+///
+/// ### Authentication
+/// - ``signIn(email:password:)``
+/// - ``signUp(name:email:password:)``
+/// - ``logout()``
+///
+/// ### Session State
+/// - ``isAuthenticated``
+/// - ``user``
+/// - ``tokens``
 @MainActor
 final class SessionManager: ObservableObject {
     @Published private(set) var user: AppUser?

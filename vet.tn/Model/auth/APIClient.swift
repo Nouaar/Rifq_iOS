@@ -2,6 +2,33 @@
 
 import Foundation
 
+/// HTTP client for making API requests to the backend.
+///
+/// The `APIClient` handles all network communication with the backend API,
+/// including request/response handling, error management, and automatic token refresh.
+///
+/// ## Usage
+///
+/// ```swift
+/// let client = APIClient.shared
+/// let response = try await client.request("GET", path: "/users/me", responseType: User.self)
+/// ```
+///
+/// ## Features
+///
+/// - Automatic token refresh on 401 errors
+/// - Retry logic for transient failures
+/// - Request/response logging in debug mode
+/// - Timeout configuration
+///
+/// ## Topics
+///
+/// ### Request Methods
+/// - ``request(_:path:headers:body:responseType:timeout:retries:retryDelay:skipAutoRefresh:)``
+///
+/// ### Token Management
+/// - ``setSessionManager(_:)``
+/// - ``refreshTokenIfNeeded()``
 final class APIClient {
     // Default app API (non-auth)
     static let shared = APIClient(baseKey: "API_BASE_URL")
@@ -65,6 +92,33 @@ final class APIClient {
 
     struct Empty: Codable {}
 
+    /// Makes an HTTP request to the backend API.
+    ///
+    /// - Parameters:
+    ///   - method: The HTTP method (GET, POST, PUT, DELETE, etc.)
+    ///   - path: The API endpoint path (e.g., "/users/me")
+    ///   - headers: Optional HTTP headers
+    ///   - body: Optional request body (must conform to `Encodable`)
+    ///   - responseType: The expected response type (must conform to `Decodable`)
+    ///   - timeout: Request timeout in seconds (default: 20)
+    ///   - retries: Number of retry attempts for transient failures (default: 1)
+    ///   - retryDelay: Delay between retries in seconds (default: 0.75)
+    ///   - skipAutoRefresh: If true, skips automatic token refresh on 401 errors
+    ///
+    /// - Returns: The decoded response object of type `T`
+    ///
+    /// - Throws: An `APIError` if the request fails or the response cannot be decoded
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// let user = try await client.request(
+    ///     "GET",
+    ///     path: "/users/me",
+    ///     headers: ["Authorization": "Bearer token"],
+    ///     responseType: User.self
+    /// )
+    /// ```
     func request<T: Decodable>(
         _ method: String,
         path: String,

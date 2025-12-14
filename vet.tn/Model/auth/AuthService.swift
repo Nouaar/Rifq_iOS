@@ -22,6 +22,31 @@ struct RegisterResponse: Codable {
 }
 
 // MARK: - Auth Service
+
+/// Service for handling user authentication operations.
+///
+/// The `AuthService` provides methods for user registration, login, token management,
+/// and authentication with third-party providers (Google, Apple).
+///
+/// ## Usage
+///
+/// ```swift
+/// let authService = AuthService.shared
+/// let response = try await authService.login(email: "user@example.com", password: "password")
+/// ```
+///
+/// ## Topics
+///
+/// ### Authentication
+/// - ``login(email:password:)``
+/// - ``register(name:email:password:captchaToken:appVersion:)``
+/// - ``google(idToken:)``
+/// - ``apple(identityToken:)``
+///
+/// ### Token Management
+/// - ``refresh(refreshToken:)``
+/// - ``me(accessToken:)``
+/// - ``logout(refreshToken:)``
 final class AuthService {
     static let shared = AuthService()
     // Route ALL auth endpoints to the dedicated AUTH_BASE_URL
@@ -36,6 +61,22 @@ final class AuthService {
     }
 
     // MARK: - Register (role is always "owner")
+    
+    /// Registers a new user account.
+    ///
+    /// Creates a new user account with the provided information. The user
+    /// will need to verify their email address before they can fully use the app.
+    ///
+    /// - Parameters:
+    ///   - name: The user's full name
+    ///   - email: The user's email address (must be unique)
+    ///   - password: The user's password (minimum 6 characters)
+    ///   - captchaToken: Optional CAPTCHA token for bot protection
+    ///   - appVersion: The app version (defaults to CFBundleShortVersionString)
+    ///
+    /// - Returns: A `RegisterResponse` indicating success and whether email verification is required
+    ///
+    /// - Throws: An `AuthError` if registration fails (e.g., email already exists)
     func register(
         name: String,
         email: String,
@@ -88,6 +129,20 @@ final class AuthService {
     }
 
     // MARK: - Login
+    
+    /// Authenticates a user with email and password.
+    ///
+    /// This method sends a login request to the backend API and returns
+    /// authentication tokens upon successful authentication.
+    ///
+    /// - Parameters:
+    ///   - email: The user's email address
+    ///   - password: The user's password
+    ///
+    /// - Returns: An `AuthResponse` containing user information and tokens
+    ///
+    /// - Throws: An `AuthError` if authentication fails, or a network error
+    ///   if the request cannot be completed.
     func login(email: String, password: String) async throws -> AuthResponse {
         struct LoginBody: Encodable { let email: String; let password: String }
         return try await api.request(

@@ -7,6 +7,17 @@
 
 import Foundation
 
+/// Service for managing pet-related API operations.
+///
+/// The `PetService` handles all pet-related backend communication including
+/// creating, reading, updating, and deleting pets.
+///
+/// ## Usage
+///
+/// ```swift
+/// let petService = PetService.shared
+/// let pets = try await petService.getPetsForOwner(ownerId: "user123", accessToken: "token")
+/// ```
 final class PetService {
     static let shared = PetService()
     
@@ -17,6 +28,16 @@ final class PetService {
     
     // MARK: - Create Pet
     
+    /// Creates a new pet for the specified owner.
+    ///
+    /// - Parameters:
+    ///   - ownerId: The ID of the pet owner
+    ///   - request: The pet creation request containing pet details
+    ///   - accessToken: The authentication token
+    ///
+    /// - Returns: The created `Pet` object
+    ///
+    /// - Throws: An error if the creation fails
     func createPet(ownerId: String, request: CreatePetRequest, accessToken: String) async throws -> Pet {
         let headers = ["Authorization": "Bearer \(accessToken)"]
         return try await api.request(
@@ -32,6 +53,15 @@ final class PetService {
     
     // MARK: - Get All Pets for Owner
     
+    /// Retrieves all pets for a specific owner.
+    ///
+    /// - Parameters:
+    ///   - ownerId: The ID of the pet owner
+    ///   - accessToken: The authentication token
+    ///
+    /// - Returns: An array of `Pet` objects belonging to the owner
+    ///
+    /// - Throws: An error if the request fails
     func getPetsForOwner(ownerId: String, accessToken: String) async throws -> [Pet] {
         let headers = ["Authorization": "Bearer \(accessToken)"]
         return try await api.request(

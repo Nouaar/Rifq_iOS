@@ -41,8 +41,6 @@ struct LoginView: View {
                 Color.vetBackground.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    TopBar(title: "RifQ")
-
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 22) {
                             paws.padding(.top, 36)
