@@ -57,9 +57,9 @@ final class APIClient {
             self.session = session
         } else {
             let config = URLSessionConfiguration.default
-            // Allow longer time for AI requests that may be rate-limited (can take 60+ seconds)
-            config.timeoutIntervalForRequest = 200 // Increased for AI rate-limited requests
-            config.timeoutIntervalForResource = 240 // Increased for AI rate-limited requests
+            // Allow longer time for cold starts on Render.com (can take 30-90 seconds)
+            config.timeoutIntervalForRequest = 120
+            config.timeoutIntervalForResource = 300
             config.waitsForConnectivity = true
             self.session = URLSession(configuration: config)
         }

@@ -150,11 +150,11 @@ final class AuthService {
             path: "/auth/login",
             body: LoginBody(email: email, password: password),
             responseType: AuthResponse.self,
-            // Increase timeout to accommodate potential cold starts on hosted infra
-            timeout: 50,
-            // Avoid stacking very long waits; let user retry manually if it still fails
-            retries: 0,
-            retryDelay: 0.9
+            // Increase timeout for hosted backend (Render cold starts can take 30-60s)
+            timeout: 90,
+            // Retry once in case of timeout
+            retries: 1,
+            retryDelay: 2.0
         )
     }
 

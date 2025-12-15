@@ -16,9 +16,6 @@ struct SubscriptionManagementView: View {
     @State private var showReactivateConfirmation = false
     @State private var isProcessing = false
     @State private var showExpirationAlert = false
-    @State private var showEmailVerification = false
-    @State private var isResendingCode = false
-    @State private var resendSuccessMessage: String?
     
     var body: some View {
         ZStack {
@@ -148,17 +145,6 @@ struct SubscriptionManagementView: View {
                 Text("Your subscription will renew soon.")
             }
         }
-        .sheet(isPresented: $showEmailVerification) {
-            SubscriptionVerificationView(subscription: subscription)
-                .onDisappear {
-                    // Refresh subscription after verification
-                    Task {
-                        await loadSubscription()
-                        // Also refresh user data to get updated role
-                        await session.refreshUserData()
-                    }
-                }
-        }
     }
     
     private func subscriptionDetailsView(subscription: Subscription) -> some View {
@@ -174,7 +160,7 @@ struct SubscriptionManagementView: View {
                 }
                 
                 let effectiveStatus = subscription.effectiveStatus
-                if effectiveStatus == .active || effectiveStatus == .expiresSoon || subscription.status == .pendingVerification || subscription.status == .pending || subscription.status == .gracePeriod {
+                if effectiveStatus == .active || effectiveStatus == .expiresSoon || subscription.status == .pending || subscription.status == .gracePeriod {
                     if let endDate = subscription.currentPeriodEnd {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Current Period")
@@ -214,8 +200,8 @@ struct SubscriptionManagementView: View {
                             }
                             
                             // Show status-specific messages
-                            if subscription.status == .pendingVerification || subscription.status == .pending {
-                                Text("Waiting for email verification")
+                            if subscription.status == .pending {
+                                Text("Payment is being processed")
                                     .font(.system(size: 13))
                                     .foregroundStyle(Color.blue)
                             } else if subscription.status == .gracePeriod {
@@ -332,46 +318,44 @@ struct SubscriptionManagementView: View {
                     .disabled(isProcessing)
                     .padding(.horizontal, 16)
                 }
-            } else if subscription.status == .pendingVerification || subscription.status == .pending {
-                // Show verification options for pending verification
+            } else if subscription.status == .pending {
+                // Show payment processing message for PENDING status
                 VStack(spacing: 16) {
-                    VStack(spacing: 8) {
-                        Text("Please confirm your subscription with the verification code sent to your email")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color.vetSubtitle)
-                            .multilineTextAlignment(.center)
-                        
-                        if let message = resendSuccessMessage {
-                            Text(message)
-                                .font(.system(size: 13))
-                                .foregroundStyle(Color.green)
-                                .multilineTextAlignment(.center)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Image(systemName: "clock.fill")
+                                .foregroundColor(.orange)
+                            Text("⏳ Payment Processing")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.orange)
                         }
+                        
+                        Text("Your payment is being processed. Your subscription will activate automatically once payment is confirmed.")
+                            .font(.system(size: 14))
+                            .foregroundColor(.vetSubtitle)
                     }
-                    .padding(.horizontal, 16)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(12)
                     
-                    // Resend Code & Verify Button - Opens verification interface
+                    // Refresh button to check if webhook has activated the subscription
                     Button {
                         Task {
-                            // First resend the code, then open verification interface
-                            await resendVerificationCodeAndOpen()
+                            await loadSubscription()
                         }
                     } label: {
-                        if isResendingCode {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .frame(maxWidth: .infinity, minHeight: 50)
-                        } else {
-                            Text("Resend Confirmation Code")
+                        HStack {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 16))
+                            Text("Refresh Status")
                                 .font(.system(size: 16, weight: .semibold))
-                                .frame(maxWidth: .infinity, minHeight: 50)
                         }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .background(Color.vetCanyon)
+                        .cornerRadius(12)
                     }
-                    .background(Color.vetCanyon)
-                    .foregroundStyle(Color.white)
-                    .cornerRadius(12)
-                    .disabled(isResendingCode)
-                    .padding(.horizontal, 16)
                 }
                 .padding(.horizontal, 16)
             } else if subscription.status == .gracePeriod {
@@ -470,8 +454,6 @@ struct SubscriptionManagementView: View {
         switch status {
         case .active:
             return ("Active", .green)
-        case .pendingVerification:
-            return ("Pending Verification", .blue)
         case .gracePeriod:
             return ("Payment Failed", .orange)
         case .expiresSoon:
@@ -479,6 +461,8 @@ struct SubscriptionManagementView: View {
         case .canceled:
             return ("Canceled", .red)
         case .pending:
+            return ("Pending", .blue)
+        case .pendingVerification:
             return ("Pending", .blue)
         case .none:
             return ("None", .gray)
@@ -802,50 +786,6 @@ struct SubscriptionManagementView: View {
         }
         
         isProcessing = false
-    }
-    
-    @MainActor
-    private func resendVerificationCodeAndOpen() async {
-        isResendingCode = true
-        resendSuccessMessage = nil
-        errorMessage = nil
-        
-        guard let accessToken = session.tokens?.accessToken else {
-            errorMessage = "Please log in to resend verification code"
-            isResendingCode = false
-            return
-        }
-        
-        do {
-            let subscriptionService = SubscriptionService.shared
-            let response = try await subscriptionService.resendSubscriptionVerification(accessToken: accessToken)
-            
-            // Code sent successfully, now open verification interface
-            isResendingCode = false
-            showEmailVerification = true
-            
-            if let userEmail = session.user?.email {
-                resendSuccessMessage = "Confirmation code sent to \(userEmail)"
-            } else {
-                resendSuccessMessage = response.message
-            }
-            
-            // Clear success message after 5 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                resendSuccessMessage = nil
-            }
-        } catch {
-            isResendingCode = false
-            if let apiError = error as? APIClient.APIError {
-                if case .http(let status, let message) = apiError {
-                    errorMessage = message.isEmpty ? "Failed to resend confirmation code" : message
-                } else {
-                    errorMessage = "Failed to resend confirmation code"
-                }
-            } else {
-                errorMessage = error.localizedDescription
-            }
-        }
     }
 }
 

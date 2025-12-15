@@ -173,28 +173,6 @@ struct BecomeProfessionalView: View {
                         .padding(.horizontal, 16)
                     }
                     
-                    // Email Verification Info
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: "info.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.blue)
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Email Verification Required")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(.blue)
-                            
-                            Text("After subscribing, you'll receive a verification code via email to activate your subscription.")
-                                .font(.system(size: 13))
-                                .foregroundColor(.vetSubtitle)
-                        }
-                    }
-                    .padding(16)
-                    .background(Color.blue.opacity(0.1))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.blue.opacity(0.3), lineWidth: 1))
-                    .cornerRadius(12)
-                    .padding(.horizontal, 16)
-                    
                     // Subscribe Now Button
                     Button {
                         if selectedRole != nil {

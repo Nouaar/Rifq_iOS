@@ -18,6 +18,9 @@
 		04E2F7592ED204BE00F28CD3 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 04E2F5DC2ED2041700F28CD3 /* FirebaseCore */; };
 		04E2F75A2ED204BE00F28CD3 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 04E2F5DD2ED2041700F28CD3 /* FirebaseMessaging */; };
 		04E2F81B2ED2076700F28CD3 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 04E2F81A2ED2076700F28CD3 /* GoogleService-Info.plist */; };
+		C71E0CF92EEF8E99007F2D7F /* StripePaymentSheet in Frameworks */ = {isa = PBXBuildFile; productRef = C71E0CF82EEF8E99007F2D7F /* StripePaymentSheet */; };
+		C71E0CFB2EEF8EA3007F2D7F /* StripePayments in Frameworks */ = {isa = PBXBuildFile; productRef = C71E0CFA2EEF8EA3007F2D7F /* StripePayments */; };
+		C71E0CFD2EEF8EA8007F2D7F /* StripePaymentsUI in Frameworks */ = {isa = PBXBuildFile; productRef = C71E0CFC2EEF8EA8007F2D7F /* StripePaymentsUI */; };
 		C7FE7D1A2EEF4DC5004E9774 /* Swinject in Frameworks */ = {isa = PBXBuildFile; productRef = C7FE7D192EEF4DC5004E9774 /* Swinject */; };
 /* End PBXBuildFile section */
 
@@ -64,9 +67,12 @@
 				04E2F5D62ED2041600F28CD3 /* FirebaseAILogic in Frameworks */,
 				04E2F5DA2ED2041600F28CD3 /* FirebaseAnalyticsCore in Frameworks */,
 				04B4DCE32EBE3D8000D51AB7 /* GoogleSignIn in Frameworks */,
+				C71E0CFB2EEF8EA3007F2D7F /* StripePayments in Frameworks */,
 				04E2F5DC2ED2041600F28CD3 /* FirebaseAnalyticsIdentitySupport in Frameworks */,
 				04B4DCE52EBE3D8000D51AB7 /* GoogleSignInSwift in Frameworks */,
 				04E2F5D82ED2041600F28CD3 /* FirebaseAnalytics in Frameworks */,
+				C71E0CF92EEF8E99007F2D7F /* StripePaymentSheet in Frameworks */,
+				C71E0CFD2EEF8EA8007F2D7F /* StripePaymentsUI in Frameworks */,
 				04E2F5D42ED2041600F28CD3 /* FirebaseAI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -88,6 +94,7 @@
 				04B4DCED2EBE6DCF00D51AB7 /* Localizable..strings */,
 				04AD1A2E2EB93A00006229B4 /* vet.tn */,
 				C7FE7D202EEF4E15004E9774 /* vet.tnTests */,
+				C71E0CF72EEF8E99007F2D7F /* Frameworks */,
 				04AD1A2D2EB93A00006229B4 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -99,6 +106,13 @@
 				C7FE7D1F2EEF4E15004E9774 /* vet.tnTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		C71E0CF72EEF8E99007F2D7F /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -132,6 +146,9 @@
 				04E2F5D92ED2041600F28CD3 /* FirebaseAnalyticsCore */,
 				04E2F5DB2ED2041600F28CD3 /* FirebaseAnalyticsIdentitySupport */,
 				C7FE7D192EEF4DC5004E9774 /* Swinject */,
+				C71E0CF82EEF8E99007F2D7F /* StripePaymentSheet */,
+				C71E0CFA2EEF8EA3007F2D7F /* StripePayments */,
+				C71E0CFC2EEF8EA8007F2D7F /* StripePaymentsUI */,
 			);
 			productName = vet.tn;
 			productReference = 04AD1A2C2EB93A00006229B4 /* vet.tn.app */;
@@ -194,6 +211,7 @@
 				04B4DCE12EBE3D8000D51AB7 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				04E2F5D12ED1FC6D00F28CD3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				C7FE7D182EEF4DC5004E9774 /* XCRemoteSwiftPackageReference "Swinject" */,
+				C71E0CF62EEF8B9A007F2D7F /* XCRemoteSwiftPackageReference "stripe-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 04AD1A2D2EB93A00006229B4 /* Products */;
@@ -569,6 +587,14 @@
 				minimumVersion = 12.6.0;
 			};
 		};
+		C71E0CF62EEF8B9A007F2D7F /* XCRemoteSwiftPackageReference "stripe-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stripe/stripe-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 25.2.0;
+			};
+		};
 		C7FE7D182EEF4DC5004E9774 /* XCRemoteSwiftPackageReference "Swinject" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/Swinject/Swinject.git";
@@ -624,6 +650,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 04E2F5D12ED1FC6D00F28CD3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseMessaging;
+		};
+		C71E0CF82EEF8E99007F2D7F /* StripePaymentSheet */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C71E0CF62EEF8B9A007F2D7F /* XCRemoteSwiftPackageReference "stripe-ios" */;
+			productName = StripePaymentSheet;
+		};
+		C71E0CFA2EEF8EA3007F2D7F /* StripePayments */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C71E0CF62EEF8B9A007F2D7F /* XCRemoteSwiftPackageReference "stripe-ios" */;
+			productName = StripePayments;
+		};
+		C71E0CFC2EEF8EA8007F2D7F /* StripePaymentsUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C71E0CF62EEF8B9A007F2D7F /* XCRemoteSwiftPackageReference "stripe-ios" */;
+			productName = StripePaymentsUI;
 		};
 		C7FE7D192EEF4DC5004E9774 /* Swinject */ = {
 			isa = XCSwiftPackageProductDependency;

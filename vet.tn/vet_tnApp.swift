@@ -28,6 +28,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Set FCM delegate
         Messaging.messaging().delegate = FCMManager.shared
         
+        // Initialize Stripe
+        _ = StripeService.shared
+        
         return true
     }
     
