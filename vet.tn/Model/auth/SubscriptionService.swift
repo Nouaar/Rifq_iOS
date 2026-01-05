@@ -162,6 +162,22 @@ final class SubscriptionService {
         return response.subscription
     }
     
+    // MARK: - Activate Pending Subscription
+    /// Manually activates a pending subscription (for testing/localhost)
+    func activatePendingSubscription(accessToken: String) async throws -> Subscription {
+        let headers = ["Authorization": "Bearer \(accessToken)"]
+        
+        return try await api.request(
+            "POST",
+            path: "/subscriptions/activate-pending",
+            headers: headers,
+            body: APIClient.Empty(),
+            responseType: Subscription.self,
+            timeout: 25,
+            retries: 1
+        )
+    }
+    
     // MARK: - Check Subscription Status
     /// Checks if subscription is active and valid
     func checkSubscriptionStatus(_ subscription: Subscription) -> (isActive: Bool, daysUntilRenewal: Int?, willRenewSoon: Bool) {

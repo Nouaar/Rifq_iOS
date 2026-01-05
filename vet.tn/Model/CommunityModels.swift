@@ -18,9 +18,16 @@ struct CommunityPost: Identifiable, Codable, Hashable {
     let petPhotoUrl: String?
     let imageUrl: String
     let caption: String?
+    let likes: Int
+    let loves: Int
+    let hahas: Int
+    let angries: Int
+    let cries: Int
     let likesCount: Int
     let commentsCount: Int
     let isLiked: Bool
+    let userReaction: String?
+    let comments: [PostComment]?
     let createdAt: String
     let updatedAt: String?
     
@@ -64,6 +71,7 @@ struct CommunityPost: Identifiable, Codable, Hashable {
         case is_liked
         case userReaction
         case user_reaction
+        case comments
         case createdAt
         case created_at
         case updatedAt
@@ -126,15 +134,15 @@ struct CommunityPost: Identifiable, Codable, Hashable {
         
         caption = try? container.decode(String.self, forKey: .caption)
         
+        // Handle individual reaction counts
+        likes = (try? container.decode(Int.self, forKey: .likes)) ?? 0
+        loves = (try? container.decode(Int.self, forKey: .loves)) ?? 0
+        hahas = (try? container.decode(Int.self, forKey: .hahas)) ?? 0
+        angries = (try? container.decode(Int.self, forKey: .angries)) ?? 0
+        cries = (try? container.decode(Int.self, forKey: .cries)) ?? 0
+        
         // Handle likesCount - backend provides individual reaction counts
         // Sum up all reactions (likes, loves, hahas, etc.)
-        let likes = (try? container.decode(Int.self, forKey: .likes)) ?? 0
-        let loves = (try? container.decode(Int.self, forKey: .loves)) ?? 0
-        let hahas = (try? container.decode(Int.self, forKey: .hahas)) ?? 0
-        let angries = (try? container.decode(Int.self, forKey: .angries)) ?? 0
-        let cries = (try? container.decode(Int.self, forKey: .cries)) ?? 0
-        
-        // Total reactions count
         if let likesCount = try? container.decode(Int.self, forKey: .likesCount) {
             self.likesCount = likesCount
         } else if let likesCount = try? container.decode(Int.self, forKey: .likes_count) {
@@ -144,24 +152,35 @@ struct CommunityPost: Identifiable, Codable, Hashable {
             self.likesCount = likes + loves + hahas + angries + cries
         }
         
-        // Handle commentsCount - backend doesn't seem to provide this in the response
+        // Decode comments array first (before commentsCount)
+        comments = try? container.decode([PostComment].self, forKey: .comments)
+        
+        // Handle commentsCount - use backend value if available, otherwise use comments array length
         if let commentsCount = try? container.decode(Int.self, forKey: .commentsCount) {
             self.commentsCount = commentsCount
         } else if let commentsCount = try? container.decode(Int.self, forKey: .comments_count) {
             self.commentsCount = commentsCount
+        } else if let comments = comments {
+            self.commentsCount = comments.count
         } else {
-            self.commentsCount = 0 // Default to 0 if not found
+            self.commentsCount = 0
         }
         
         // Handle isLiked - backend uses userReaction instead
-        if let userReaction = try? container.decode(String?.self, forKey: .userReaction) ?? (try? container.decode(String?.self, forKey: .user_reaction)) {
-            // If userReaction is not null, user has reacted
-            self.isLiked = userReaction != nil && !userReaction.isEmpty
+        let decodedUserReaction = (try? container.decode(String.self, forKey: .userReaction)) ?? (try? container.decode(String.self, forKey: .user_reaction))
+        
+        if let userReactionValue = decodedUserReaction, !userReactionValue.isEmpty {
+            // If userReaction exists and not empty, user has reacted
+            self.userReaction = userReactionValue
+            self.isLiked = true
         } else if let isLiked = try? container.decode(Bool.self, forKey: .isLiked) {
+            self.userReaction = nil
             self.isLiked = isLiked
         } else if let isLiked = try? container.decode(Bool.self, forKey: .is_liked) {
+            self.userReaction = nil
             self.isLiked = isLiked
         } else {
+            self.userReaction = nil
             self.isLiked = false // Default to false if not found
         }
         
@@ -188,9 +207,16 @@ struct CommunityPost: Identifiable, Codable, Hashable {
         try container.encodeIfPresent(petPhotoUrl, forKey: .petPhotoUrl)
         try container.encode(imageUrl, forKey: .imageUrl)
         try container.encodeIfPresent(caption, forKey: .caption)
+        try container.encode(likes, forKey: .likes)
+        try container.encode(loves, forKey: .loves)
+        try container.encode(hahas, forKey: .hahas)
+        try container.encode(angries, forKey: .angries)
+        try container.encode(cries, forKey: .cries)
         try container.encode(likesCount, forKey: .likesCount)
         try container.encode(commentsCount, forKey: .commentsCount)
         try container.encode(isLiked, forKey: .isLiked)
+        try container.encodeIfPresent(userReaction, forKey: .userReaction)
+        try container.encodeIfPresent(comments, forKey: .comments)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
     }
@@ -239,10 +265,11 @@ struct CreatePostRequest: Codable {
 
 struct PostComment: Identifiable, Codable, Hashable {
     let id: String
-    let postId: String
+    let postId: String?
     let userId: String
     let userName: String?
     let userAvatarUrl: String?
+    let userRole: String?
     let content: String
     let createdAt: String
     
@@ -257,7 +284,12 @@ struct PostComment: Identifiable, Codable, Hashable {
         case user_name
         case userAvatarUrl
         case user_avatar_url
+        case userProfileImage
+        case user_profile_image
+        case userRole
+        case user_role
         case content
+        case text
         case createdAt
         case created_at
     }
@@ -274,13 +306,11 @@ struct PostComment: Identifiable, Codable, Hashable {
             throw DecodingError.keyNotFound(CodingKeys.id, DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Missing both id and _id"))
         }
         
-        // Handle postId
+        // Handle postId (optional for embedded comments)
         if let postId = try? container.decode(String.self, forKey: .postId) {
             self.postId = postId
-        } else if let postId = try? container.decode(String.self, forKey: .post_id) {
-            self.postId = postId
         } else {
-            throw DecodingError.keyNotFound(CodingKeys.postId, DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Missing postId"))
+            self.postId = (try? container.decode(String.self, forKey: .post_id))
         }
         
         // Handle userId
@@ -293,9 +323,20 @@ struct PostComment: Identifiable, Codable, Hashable {
         }
         
         userName = (try? container.decode(String.self, forKey: .userName)) ?? (try? container.decode(String.self, forKey: .user_name))
-        userAvatarUrl = (try? container.decode(String.self, forKey: .userAvatarUrl)) ?? (try? container.decode(String.self, forKey: .user_avatar_url))
+        userAvatarUrl = (try? container.decode(String.self, forKey: .userAvatarUrl)) 
+            ?? (try? container.decode(String.self, forKey: .user_avatar_url))
+            ?? (try? container.decode(String.self, forKey: .userProfileImage))
+            ?? (try? container.decode(String.self, forKey: .user_profile_image))
+        userRole = (try? container.decode(String.self, forKey: .userRole)) ?? (try? container.decode(String.self, forKey: .user_role))
         
-        content = try container.decode(String.self, forKey: .content)
+        // Handle content/text (backend uses 'text', iOS uses 'content')
+        if let content = try? container.decode(String.self, forKey: .content) {
+            self.content = content
+        } else if let text = try? container.decode(String.self, forKey: .text) {
+            self.content = text
+        } else {
+            throw DecodingError.keyNotFound(CodingKeys.content, DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Missing both content and text"))
+        }
         
         // Handle createdAt
         if let createdAt = try? container.decode(String.self, forKey: .createdAt) {
@@ -322,7 +363,11 @@ struct PostComment: Identifiable, Codable, Hashable {
 // MARK: - Create Comment Request
 
 struct CreateCommentRequest: Codable {
-    let content: String
+    let text: String
+    
+    enum CodingKeys: String, CodingKey {
+        case text
+    }
 }
 
 // MARK: - Post Response

@@ -18,11 +18,18 @@ struct PostDetailView: View {
     @State private var isPostingComment = false
     @State private var showDeleteAlert = false
     @State private var isLiking = false
+    @State private var localPost: CommunityPost
     
     private let communityService = CommunityService.shared
     private var isOwner: Bool {
         guard let userId = session.user?.id else { return false }
         return post.userId == userId
+    }
+    
+    init(post: CommunityPost, viewModel: CommunityViewModel) {
+        self.post = post
+        self.viewModel = viewModel
+        _localPost = State(initialValue: post)
     }
     
     var body: some View {
@@ -56,38 +63,59 @@ struct PostDetailView: View {
                         
                         // Comments Section
                         VStack(alignment: .leading, spacing: 16) {
-                            Text("Comments")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.vetTitle)
-                                .padding(.horizontal, 16)
+                            HStack {
+                                Text("Comments")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.vetTitle)
+                                
+                                if !comments.isEmpty {
+                                    Text("(\(comments.count))")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.vetSubtitle)
+                                }
+                                
+                                Spacer()
+                            }
+                            .padding(.horizontal, 16)
                             
                             if isLoadingComments {
                                 ProgressView()
                                     .frame(maxWidth: .infinity)
-                                    .padding()
+                                    .padding(.vertical, 32)
                             } else if comments.isEmpty {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "message")
-                                        .font(.system(size: 32))
+                                VStack(spacing: 12) {
+                                    Image(systemName: "bubble.left.and.bubble.right")
+                                        .font(.system(size: 40))
                                         .foregroundColor(.vetSubtitle.opacity(0.5))
                                     Text("No comments yet")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.vetTitle)
+                                    Text("Be the first to comment")
                                         .font(.system(size: 14))
                                         .foregroundColor(.vetSubtitle)
                                 }
                                 .frame(maxWidth: .infinity)
-                                .padding()
+                                .padding(.vertical, 40)
                             } else {
-                                ForEach(comments) { comment in
-                                    CommentRow(
-                                        comment: comment,
-                                        onDelete: {
-                                            guard let userId = session.user?.id,
-                                                  comment.userId == userId else { return }
-                                            Task {
-                                                await deleteComment(comment)
+                                VStack(spacing: 0) {
+                                    ForEach(comments) { comment in
+                                        CommentRow(
+                                            comment: comment,
+                                            onDelete: {
+                                                guard let userId = session.user?.id,
+                                                      comment.userId == userId else { return }
+                                                Task {
+                                                    await deleteComment(comment)
+                                                }
                                             }
+                                        )
+                                        .environmentObject(session)
+                                        
+                                        if comment.id != comments.last?.id {
+                                            Divider()
+                                                .padding(.leading, 60)
                                         }
-                                    )
+                                    }
                                 }
                             }
                         }
@@ -95,7 +123,7 @@ struct PostDetailView: View {
                     }
                 }
                 
-                // Comment Input
+                // Comment Input - pinned at bottom
                 VStack {
                     Spacer()
                     CommentInputView(
@@ -107,8 +135,8 @@ struct PostDetailView: View {
                             }
                         }
                     )
-                    .background(Color.vetBackground)
                 }
+                .ignoresSafeArea(.keyboard, edges: .bottom)
             }
             .navigationTitle("Post")
             .navigationBarTitleDisplayMode(.inline)
@@ -123,7 +151,13 @@ struct PostDetailView: View {
                 }
             }
             .task {
-                await loadComments()
+                // Load comments from the post data we already have
+                if let postComments = localPost.comments {
+                    comments = postComments
+                }
+                
+                // Refresh post to get latest comments
+                await refreshPost()
             }
             .alert("Delete Post", isPresented: $showDeleteAlert) {
                 Button("Cancel", role: .cancel) { }
@@ -141,22 +175,14 @@ struct PostDetailView: View {
         }
     }
     
-    private func loadComments() async {
-        guard let accessToken = session.tokens?.accessToken else { return }
-        
-        isLoadingComments = true
-        do {
-            let response = try await communityService.getComments(
-                postId: post.id,
-                accessToken: accessToken
-            )
-            comments = response.comments
-        } catch {
-            #if DEBUG
-            print("❌ Failed to load comments: \(error)")
-            #endif
+    private func refreshPost() async {
+        // Find the updated post in the viewModel's posts array
+        if let updatedPost = viewModel.posts.first(where: { $0.id == post.id }) {
+            localPost = updatedPost
+            if let postComments = updatedPost.comments {
+                comments = postComments
+            }
         }
-        isLoadingComments = false
     }
     
     private func postComment() async {
@@ -168,14 +194,21 @@ struct PostDetailView: View {
         commentText = ""
         
         do {
-            let request = CreateCommentRequest(content: text)
-            let newComment = try await communityService.createComment(
+            let request = CreateCommentRequest(text: text)
+            let response = try await communityService.createComment(
                 postId: post.id,
                 request: request,
                 accessToken: accessToken
             )
-            // Comments are sorted by createdAt descending (newest first)
-            comments.insert(newComment, at: 0)
+            
+            // Add the new comment to the beginning of the list
+            if let newComment = response.comment {
+                comments.insert(newComment, at: 0)
+            }
+            
+            // Refresh the post to get updated data
+            await viewModel.loadPosts(refresh: true)
+            await refreshPost()
         } catch {
             #if DEBUG
             print("❌ Failed to post comment: \(error)")
@@ -271,7 +304,9 @@ struct PostDetailCard: View {
                 case .success(let image):
                     image
                         .resizable()
-                        .scaledToFill()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity)
+                        .clipped()
                 case .failure:
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
@@ -280,9 +315,7 @@ struct PostDetailCard: View {
                     EmptyView()
                 }
             }
-            .frame(height: 400)
             .frame(maxWidth: .infinity)
-            .clipped()
             
             // Actions
             HStack(spacing: 20) {
@@ -335,6 +368,7 @@ struct CommentRow: View {
     var onDelete: (() -> Void)? = nil
     @EnvironmentObject private var session: SessionManager
     @State private var showDeleteAlert = false
+    @State private var showUserProfile = false
     
     private var isOwner: Bool {
         guard let userId = session.user?.id else { return false }
@@ -343,50 +377,76 @@ struct CommentRow: View {
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            AsyncImage(url: URL(string: comment.userAvatarUrl ?? "")) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-            } placeholder: {
-                Circle()
-                    .fill(Color.vetCanyon.opacity(0.2))
-                    .overlay(
-                        Text(comment.userName?.prefix(1).uppercased() ?? "?")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.vetCanyon)
-                    )
+            Button {
+                showUserProfile = true
+            } label: {
+                AsyncImage(url: URL(string: comment.userAvatarUrl ?? "")) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Circle()
+                        .fill(Color.vetCanyon.opacity(0.2))
+                        .overlay(
+                            Text((comment.userName ?? "?").prefix(1).uppercased())
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.vetCanyon)
+                        )
+                }
+                .frame(width: 36, height: 36)
+                .clipShape(Circle())
             }
-            .frame(width: 36, height: 36)
-            .clipShape(Circle())
+            .buttonStyle(.plain)
             
-            VStack(alignment: .leading, spacing: 4) {
-                Text(comment.userName ?? "Unknown")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.vetTitle)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    Button {
+                        showUserProfile = true
+                    } label: {
+                        Text(comment.userName ?? "Unknown")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.vetTitle)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    if let role = comment.userRole {
+                        if role == "veterinarian" || role == "pet-sitter" {
+                            Text("• \(role == "veterinarian" ? "Vet" : "Sitter")")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.vetCanyon)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    if isOwner, let onDelete = onDelete {
+                        Button {
+                            showDeleteAlert = true
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 14))
+                                .foregroundColor(.red.opacity(0.7))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
                 
                 Text(comment.content)
                     .font(.system(size: 14))
                     .foregroundColor(.vetTitle)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(nil)
+                    .multilineTextAlignment(.leading)
                 
                 Text(formatDate(comment.createdAt))
                     .font(.system(size: 12))
                     .foregroundColor(.vetSubtitle)
             }
-            
-            Spacer()
-            
-            if isOwner, let onDelete = onDelete {
-                Button {
-                    showDeleteAlert = true
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.system(size: 14))
-                        .foregroundColor(.red.opacity(0.7))
-                }
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.vertical, 12)
         .alert("Delete Comment", isPresented: $showDeleteAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
@@ -394,6 +454,15 @@ struct CommentRow: View {
             }
         } message: {
             Text("Are you sure you want to delete this comment?")
+        }
+        .sheet(isPresented: $showUserProfile) {
+            UserProfileView(
+                userId: comment.userId,
+                userName: comment.userName,
+                userAvatarUrl: comment.userAvatarUrl,
+                userRole: comment.userRole
+            )
+            .environmentObject(session)
         }
     }
     

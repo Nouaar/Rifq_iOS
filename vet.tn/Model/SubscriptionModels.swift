@@ -178,8 +178,13 @@ struct Subscription: Codable, Equatable {
             }
         }
         
-        // If backend says canceled but date hasn't expired, treat as expires_soon
-        // (This handles the case where backend sets status to CANCELED immediately)
+        // If backend says canceled and cancelAtPeriodEnd is false, subscription was immediately canceled
+        // Return the actual status (canceled) - don't convert to expires_soon
+        if status == .canceled && cancelAtPeriodEnd == false {
+            return .canceled
+        }
+        
+        // If backend says canceled but cancelAtPeriodEnd is true or nil, check date
         if status == .canceled {
             if let periodEnd = currentPeriodEnd {
                 if periodEnd > Date() {

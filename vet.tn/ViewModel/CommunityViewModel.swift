@@ -132,7 +132,7 @@ final class CommunityViewModel: ObservableObject {
                 // Remove reaction
                 updatedPost = try await communityService.removeReaction(
                     postId: postId,
-                    reactionType: "like", // Default to "like" for now
+                    reactionType: post.userReaction ?? "like",
                     accessToken: accessToken
                 )
             } else {
@@ -151,6 +151,63 @@ final class CommunityViewModel: ObservableObject {
         } catch {
             #if DEBUG
             print("❌ Failed to toggle like: \(error)")
+            #endif
+        }
+    }
+    
+    // MARK: - React to Post
+    
+    func reactToPost(postId: String, reactionType: String) async {
+        guard let session = sessionManager,
+              let accessToken = session.tokens?.accessToken else {
+            return
+        }
+        
+        // Find the post to check current reaction
+        guard let postIndex = posts.firstIndex(where: { $0.id == postId }) else {
+            return
+        }
+        let post = posts[postIndex]
+        
+        do {
+            let updatedPost: CommunityPost
+            
+            // If user already has this reaction, remove it
+            if post.userReaction == reactionType {
+                updatedPost = try await communityService.removeReaction(
+                    postId: postId,
+                    reactionType: reactionType,
+                    accessToken: accessToken
+                )
+            } else if post.userReaction != nil {
+                // User has a different reaction, first remove old reaction
+                _ = try await communityService.removeReaction(
+                    postId: postId,
+                    reactionType: post.userReaction!,
+                    accessToken: accessToken
+                )
+                // Then add new reaction
+                updatedPost = try await communityService.reactToPost(
+                    postId: postId,
+                    reactionType: reactionType,
+                    accessToken: accessToken
+                )
+            } else {
+                // User has no reaction, add new one
+                updatedPost = try await communityService.reactToPost(
+                    postId: postId,
+                    reactionType: reactionType,
+                    accessToken: accessToken
+                )
+            }
+            
+            // Update post in list
+            if let index = posts.firstIndex(where: { $0.id == postId }) {
+                posts[index] = updatedPost
+            }
+        } catch {
+            #if DEBUG
+            print("❌ Failed to react to post: \(error)")
             #endif
         }
     }
@@ -256,5 +313,32 @@ final class CommunityViewModel: ObservableObject {
             return false
         }
     }
+    
+    // MARK: - Report Post
+    
+    func reportPost(postId: String) async {
+        guard let session = sessionManager,
+              let accessToken = session.tokens?.accessToken else {
+            return
+        }
+        
+        do {
+            try await communityService.reportPost(
+                postId: postId,
+                accessToken: accessToken
+            )
+            
+            // Remove post from list if it was deleted
+            posts.removeAll { $0.id == postId }
+            
+            #if DEBUG
+            print("✅ Post reported successfully")
+            #endif
+        } catch {
+            self.error = error.localizedDescription
+            #if DEBUG
+            print("❌ Failed to report post: \(error)")
+            #endif
+        }
+    }
 }
-

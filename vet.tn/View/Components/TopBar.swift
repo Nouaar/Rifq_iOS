@@ -8,6 +8,7 @@ struct TopBar: View {
     var onSettings: (() -> Void)? = nil   // (kept in case you still want a custom action)
     var onCommunity: (() -> Void)? = nil
     var onDrawer: (() -> Void)? = nil
+    var tabSelection: Binding<VetTab>?
 
     @EnvironmentObject private var theme: ThemeStore
     @EnvironmentObject private var session: SessionManager
@@ -129,11 +130,19 @@ struct TopBar: View {
             }
         }
         .sheet(isPresented: $showDrawer) {
-            NavigationStack {
-                DrawerView()
+            if let tabBinding = tabSelection {
+                NavigationStack {
+                    DrawerView(tabSelection: tabBinding)
+                }
+                .environmentObject(theme)
+                .environmentObject(session)
+            } else {
+                NavigationStack {
+                    DrawerView(tabSelection: .constant(.home))
+                }
+                .environmentObject(theme)
+                .environmentObject(session)
             }
-            .environmentObject(theme)
-            .environmentObject(session)
         }
     }
 

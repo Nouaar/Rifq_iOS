@@ -189,38 +189,22 @@ final class SessionManager: ObservableObject {
             let c = !(cached?.pets?.isEmpty ?? true)
             return s || c
         }()
-        var role = server.role ?? cached?.role // Prefer server role, fallback to cached
         let subscription = server.subscription ?? cached?.subscription // Prefer server subscription
         
-        // If subscription is "expires soon" (date hasn't expired), preserve professional role
-        // Backend might set role to "owner" immediately on cancel, but user should keep
-        // professional role until expiration date passes
+        // Role logic: Trust the backend completely (matches Android behavior)
+        // Backend manages role based on subscription status
+        // - Active subscription → backend sets role to "vet" or "sitter"
+        // - Canceled/expired subscription → backend sets role to "owner"
+        // iOS just displays whatever the backend sends
+        let role = server.role ?? cached?.role
+        
+        #if DEBUG
         if let sub = subscription {
-            let effectiveStatus = sub.effectiveStatus
-            
-            // Check if subscription should maintain professional role
-            // (active, expiresSoon, or pendingVerification)
-            if effectiveStatus == .expiresSoon || effectiveStatus == .active {
-                // Subscription is still valid (hasn't expired) - preserve professional role
-                // Use subscription role (vet/sitter) or fallback to cached professional role
-                if !sub.role.isEmpty {
-                    let roleLower = sub.role.lowercased()
-                    if roleLower == "vet" || roleLower == "sitter" {
-                        role = sub.role
-                    }
-                } else if let cachedRole = cached?.role {
-                    let cachedRoleLower = cachedRole.lowercased()
-                    if cachedRoleLower == "vet" || cachedRoleLower == "sitter" {
-                        // Fallback to cached role if subscription role is missing
-                        role = cachedRole
-                    }
-                }
-            } else if effectiveStatus == .canceled {
-                // Subscription has expired - use server role (should be "owner")
-                // Don't override with subscription role
-            }
-            // For other statuses (pendingVerification, etc.), use server role
+            print("📋 User role: \(role ?? "nil"), Subscription: status=\(sub.status), effectiveStatus=\(sub.effectiveStatus)")
+        } else {
+            print("📋 User role: \(role ?? "nil"), No subscription")
         }
+        #endif
 
         return AppUser(
             id: server.id,                 // always prefer server id/email

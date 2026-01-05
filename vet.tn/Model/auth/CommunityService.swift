@@ -236,14 +236,14 @@ final class CommunityService {
     
     // MARK: - Create Comment
     
-    func createComment(postId: String, request: CreateCommentRequest, accessToken: String) async throws -> PostComment {
+    struct CreateCommentResponse: Codable {
+        let message: String?
+        let comment: PostComment?
+        let post: CommunityPost? // Backend might return updated post
+    }
+    
+    func createComment(postId: String, request: CreateCommentRequest, accessToken: String) async throws -> CreateCommentResponse {
         let headers = ["Authorization": "Bearer \(accessToken)"]
-        
-        // Backend returns { message: "...", comment: {...} }
-        struct CreateCommentResponse: Codable {
-            let message: String?
-            let comment: PostComment
-        }
         
         let response = try await api.request(
             "POST",
@@ -255,7 +255,7 @@ final class CommunityService {
             retries: 1
         )
         
-        return response.comment
+        return response
     }
     
     // MARK: - Delete Comment
@@ -310,6 +310,26 @@ final class CommunityService {
             path: "/community/posts/\(postId)",
             headers: headers,
             responseType: EmptyResponse.self,
+            timeout: 30,
+            retries: 1
+        )
+    }
+    
+    // MARK: - Report Post
+    
+    func reportPost(postId: String, accessToken: String) async throws {
+        let headers = ["Authorization": "Bearer \(accessToken)"]
+        
+        struct ReportResponse: Codable {
+            let message: String
+            let deleted: Bool?
+        }
+        
+        _ = try await api.request(
+            "POST",
+            path: "/community/posts/\(postId)/report",
+            headers: headers,
+            responseType: ReportResponse.self,
             timeout: 30,
             retries: 1
         )

@@ -55,7 +55,8 @@ struct HomeView: View {
                     TopBar(
                         title: "Home",
                         onCommunity: { goMessages = true },
-                        onDrawer: { showDrawer = true }
+                        onDrawer: { showDrawer = true },
+                        tabSelection: $tabSelection
                     )
 
                     dailyTipCarousel
@@ -99,7 +100,7 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showDrawer) {
             NavigationStack {
-                DrawerView()
+                DrawerView(tabSelection: $tabSelection)
             }
             .environmentObject(session)
         }

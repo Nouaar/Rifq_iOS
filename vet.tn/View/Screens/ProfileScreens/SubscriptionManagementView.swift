@@ -12,6 +12,7 @@ struct SubscriptionManagementView: View {
     @State private var subscription: Subscription?
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var successMessage: String?
     @State private var showCancelConfirmation = false
     @State private var showReactivateConfirmation = false
     @State private var isProcessing = false
@@ -282,6 +283,7 @@ struct SubscriptionManagementView: View {
                 }
             } else if effectiveStatus == .canceled {
                 // Subscription is truly canceled (date has expired) - must create new subscription
+                // User needs to choose role again (vet or sitter)
                 VStack(spacing: 12) {
                     if let periodEnd = subscription.currentPeriodEnd {
                         Text("Your subscription expired on \(formatDate(periodEnd)). Create a new subscription to continue.")
@@ -297,25 +299,14 @@ struct SubscriptionManagementView: View {
                             .padding(.horizontal, 16)
                     }
                     
-                    Button {
-                        Task {
-                            await renewSubscription()
-                        }
-                    } label: {
-                        if isProcessing {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .frame(maxWidth: .infinity, minHeight: 50)
-                        } else {
-                            Text("Create New Subscription")
-                                .font(.system(size: 16, weight: .semibold))
-                                .frame(maxWidth: .infinity, minHeight: 50)
-                        }
+                    NavigationLink(destination: JoinTeamView()) {
+                        Text("Subscribe Again")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                            .background(Color.vetCanyon)
+                            .foregroundStyle(Color.white)
+                            .cornerRadius(12)
                     }
-                    .background(Color.vetCanyon)
-                    .foregroundStyle(Color.white)
-                    .cornerRadius(12)
-                    .disabled(isProcessing)
                     .padding(.horizontal, 16)
                 }
             } else if subscription.status == .pending {
@@ -356,6 +347,28 @@ struct SubscriptionManagementView: View {
                         .background(Color.vetCanyon)
                         .cornerRadius(12)
                     }
+                    .disabled(isProcessing)
+                    
+                    // Manual activation button for testing/localhost
+                    Button {
+                        Task {
+                            await activatePendingSubscription()
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "checkmark.circle")
+                                .font(.system(size: 16))
+                            Text("Manually Activate Subscription")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .foregroundColor(.vetCanyon)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.vetCanyon, lineWidth: 2)
+                        )
+                    }
+                    .disabled(isProcessing)
                 }
                 .padding(.horizontal, 16)
             } else if subscription.status == .gracePeriod {
@@ -416,26 +429,72 @@ struct SubscriptionManagementView: View {
     }
     
     private var noSubscriptionView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "creditcard")
-                .font(.system(size: 48))
-                .foregroundStyle(Color.vetSubtitle)
+        VStack(spacing: 24) {
+            Image(systemName: "star.circle.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(Color.vetCanyon)
             
-            Text("No Active Subscription")
-                .font(.system(size: 20, weight: .semibold))
+            Text("Become a Professional")
+                .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(Color.vetTitle)
             
-            Text("Subscribe to become a vet or pet sitter and appear in discover lists.")
+            Text("Subscribe to unlock premium features, get a verified badge, and choose to become a Veterinarian or Pet Sitter.")
                 .font(.system(size: 14))
                 .foregroundStyle(Color.vetSubtitle)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                benefitRow(icon: "checkmark.circle.fill", text: "Verified Badge")
+                benefitRow(icon: "checkmark.circle.fill", text: "Professional Profile")
+                benefitRow(icon: "checkmark.circle.fill", text: "Appear in Discover")
+                benefitRow(icon: "checkmark.circle.fill", text: "Receive Bookings")
+                benefitRow(icon: "checkmark.circle.fill", text: "Manage Schedule")
+            }
+            .padding(.horizontal, 32)
+            
+            Text("$30/month")
+                .font(.system(size: 32, weight: .bold))
+                .foregroundStyle(Color.vetCanyon)
+            
+            // Subscribe button
+            Button {
+                Task {
+                    await createPremiumSubscription()
+                }
+            } label: {
+                if isProcessing {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                } else {
+                    Text("Subscribe Now")
+                        .font(.system(size: 16, weight: .bold))
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .background(Color.vetCanyon)
+                        .foregroundStyle(Color.white)
+                        .cornerRadius(12)
+                }
+            }
+            .padding(.horizontal, 32)
         }
-        .padding(.top, 60)
+        .padding(.top, 40)
         .onAppear {
             #if DEBUG
             print("📱 noSubscriptionView appeared")
             #endif
+        }
+    }
+    
+    private func benefitRow(icon: String, text: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(Color.green)
+                .font(.system(size: 16))
+            Text(text)
+                .font(.system(size: 14))
+                .foregroundStyle(Color.vetTitle)
+            Spacer()
         }
     }
     
@@ -515,6 +574,33 @@ struct SubscriptionManagementView: View {
         }
         
         isLoading = false
+    }
+    
+    @MainActor
+    private func activatePendingSubscription() async {
+        isProcessing = true
+        errorMessage = nil
+        
+        guard let accessToken = session.tokens?.accessToken else {
+            errorMessage = "Please log in to activate subscription"
+            isProcessing = false
+            return
+        }
+        
+        do {
+            let subscriptionService = SubscriptionService.shared
+            let sub = try await subscriptionService.activatePendingSubscription(accessToken: accessToken)
+            
+            subscription = sub
+            successMessage = "Subscription activated successfully!"
+            
+            // Refresh user data
+            await session.refreshUserData()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        
+        isProcessing = false
     }
     
     @MainActor
@@ -774,6 +860,47 @@ struct SubscriptionManagementView: View {
                 if case .http(let status, let message) = apiError {
                     if status == 409 {
                         errorMessage = "You already have an active subscription. If it's scheduled to cancel, use the 'Reactivate' button instead."
+                    } else {
+                        errorMessage = parseErrorMessage(message)
+                    }
+                } else {
+                    errorMessage = error.localizedDescription
+                }
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        }
+        
+        isProcessing = false
+    }
+    
+    @MainActor
+    private func createPremiumSubscription() async {
+        isProcessing = true
+        errorMessage = nil
+        
+        guard let accessToken = session.tokens?.accessToken else {
+            errorMessage = "Please log in to subscribe"
+            isProcessing = false
+            return
+        }
+        
+        let subscriptionService = SubscriptionService.shared
+        
+        do {
+            // Create subscription with "premium" role (user will choose vet/sitter later)
+            let response = try await subscriptionService.createSubscription(role: "premium", accessToken: accessToken)
+            subscription = response.subscription
+            
+            // Refresh user data
+            await session.refreshUserData()
+            
+            successMessage = "Subscription created! You can now choose your professional role below."
+        } catch {
+            if let apiError = error as? APIClient.APIError {
+                if case .http(let status, let message) = apiError {
+                    if status == 409 {
+                        errorMessage = "You already have a subscription. Please refresh."
                     } else {
                         errorMessage = parseErrorMessage(message)
                     }

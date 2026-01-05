@@ -8,6 +8,7 @@ import SwiftUI
 struct DrawerView: View {
     @EnvironmentObject private var session: SessionManager
     @Environment(\.dismiss) private var dismiss
+    @Binding var tabSelection: VetTab
     
     @State private var showMessages = false
     @State private var showCommunity = false
@@ -127,7 +128,7 @@ struct DrawerView: View {
         }
         .fullScreenCover(isPresented: $showCommunity) {
             NavigationStack {
-                CommunityFeedView()
+                CommunityFeedView(tabSelection: $tabSelection)
                     .toolbar {
                         ToolbarItem(placement: .navigationBarLeading) {
                             Button {
@@ -229,7 +230,7 @@ struct DrawerMenuItem: View {
 
 
 #Preview {
-    DrawerView()
+    DrawerView(tabSelection: .constant(.home))
         .environmentObject(SessionManager())
 }
 

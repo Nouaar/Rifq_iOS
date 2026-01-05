@@ -222,45 +222,56 @@ struct ProfileView: View {
                                     icon: "lock.fill",
                                     iconColor: .green
                                 )
-                                
-                                // Subscription Management (only for vets and sitters)
-                                if let role = session.user?.role?.lowercased(), (role == "vet" || role == "sitter") {
-                                    Button {
-                                        showSubscriptionManagement = true
-                                    } label: {
-                                        SettingsRow(
-                                            title: "Subscription",
-                                            icon: "creditcard.fill",
-                                            iconColor: .blue
-                                        )
+                            }
+                            .padding(.horizontal, 16)
+                        }
+                        
+                        // Subscription Button - Always show (matches Android)
+                        // Show "Manage Subscription" if hasSubscription, else "Subscribe Now"
+                        // hasSubscription = subscription exists AND status is not none/canceled
+                        VStack(spacing: 16) {
+                            let hasActiveSubscription = session.user?.subscription != nil && 
+                                                       session.user?.subscription?.status != .none &&
+                                                       session.user?.subscription?.status != .canceled
+                            
+                            if hasActiveSubscription {
+                                // Manage Subscription button (blue)
+                                Button {
+                                    showSubscriptionManagement = true
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "gearshape.fill")
+                                            .font(.system(size: 16))
+                                        Text("Manage Subscription")
+                                            .font(.system(size: 16, weight: .bold))
                                     }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.horizontal, 16)
-
-                            Button {
-                                goJoinTeam = true
-                            } label: {
-                                Text("JOIN US")
-                                    .font(.system(size: 16, weight: .bold))
                                     .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity, minHeight: 48)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color.vetCanyon)
-                                    )
-                                    .overlay(
-                                        HStack {
-                                            Image(systemName: "person.2.fill")
-                                                .foregroundColor(.white)
-                                            Spacer()
-                                        }
-                                        .padding(.horizontal, 18)
-                                    )
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 48)
+                                    .background(Color.blue)
+                                    .cornerRadius(12)
+                                }
+                                .padding(.horizontal, 16)
+                            } else {
+                                // Subscribe Now button (orange) - Navigate to SubscriptionManagementView
+                                // This allows subscribing WITHOUT choosing role first (like Android's SubscriptionBenefitsScreen)
+                                Button {
+                                    showSubscriptionManagement = true
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "star.fill")
+                                            .font(.system(size: 16))
+                                        Text("Subscribe Now")
+                                            .font(.system(size: 16, weight: .bold))
+                                    }
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 48)
+                                    .background(Color.vetCanyon)
+                                    .cornerRadius(12)
+                                }
+                                .padding(.horizontal, 16)
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.top, 8)
                             
                             // Theme Switcher
                             VStack(spacing: 0) {
